@@ -58,10 +58,27 @@ export interface ShellHost {
   readonly nodeRequire: ShellRequire;
 }
 
+/** Live webpack discovery status, polled for the debug panel and smoke report. */
+export interface IonWebpackStatus {
+  /** The chunk hook is installed on `webpackChunkdiscord_app`. */
+  readonly hooked: boolean;
+  /** `__webpack_require__` was captured from a running factory. */
+  readonly ready: boolean;
+  /** Factories seen on the chunk stream so far. */
+  readonly factories: number;
+  /** Modules evaluated so far. */
+  readonly cache: number;
+  /** Sample `findByProps` probe succeeded (module discovery works). */
+  readonly byProps: boolean;
+  /** Sample `findStore` probe succeeded (store discovery works). */
+  readonly store: boolean;
+}
+
 /** Injected by the core bundle as proof that it ran in the main world. */
 export interface IonGlobal {
   readonly version: string;
   readonly startedAt: number;
+  webpack?: IonWebpackStatus;
 }
 
 declare global {

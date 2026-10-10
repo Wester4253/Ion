@@ -11,7 +11,7 @@ import type { BrowserWindow } from "electron";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const SETTLE_DELAY_MS = 6000;
+const SETTLE_DELAY_MS = 25_000;
 
 export function parseSmokeArg(argv: readonly string[]): string | null {
   const arg = argv.find((entry) => entry.startsWith("--ion-smoke"));
@@ -44,6 +44,12 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
         "document.getElementsByTagName('ion-debug-host').length === 1",
       ),
       coreStartMs: await probe("window.__ION__ ? Math.round(window.__ION__.startedAt) : -1"),
+      webpackStatus: await probe(
+        "window.__ION__ && window.__ION__.webpack ? window.__ION__.webpack : null",
+      ),
+      debugPanelWebpack: await probe(
+        "(() => { const host = document.querySelector('ion-debug-host'); const field = host?.shadowRoot?.querySelector('[data-field=\"webpack\"]'); return field ? field.textContent : null; })()",
+      ),
     };
     const image = await contents.capturePage().catch(() => null);
     if (image && !image.isEmpty()) {
@@ -56,7 +62,7 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
 
   win.webContents.once("did-finish-load", () => {
     // The SPA needs a moment after load before the login UI is painted.
-    setTimeout(() => void finish("did-finish-load"), 4000);
+    setTimeout(() => void finish("did-finish-load"), 9000);
   });
   win.webContents.on("render-process-gone", (_event, details) => {
     void finish(`render-process-gone: ${details.reason}`);

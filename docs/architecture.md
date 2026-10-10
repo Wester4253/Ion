@@ -51,5 +51,64 @@ over IPC, not a real module.
 ### Debug panel
 
 The core bundle mounts a small status widget (shadow root, Discord CSS
-variables only) showing injection time, shell version, and bridge state. It is
-a diagnostic: the product UI lives in `packages/ui`.
+variables only) showing injection time, shell version, bridge state, and live
+webpack-discovery status. It is a diagnostic: the product UI lives in
+`packages/ui`.
+
+## Chunk hook and module discovery
+
+The core installs a hook on `window.webpackChunkdiscord_app` before any page
+script runs. Discord ships **rspack** (not webpack proper — `bundler=rspack@1`
+in its runtimes), whose setup does:
+
+```js
+(f = self.webpackChunkdiscord_app = self.webpackChunkdiscord_app || []).forEach(
+  callback.bind(null, 0),
+);
+f.push = callback.bind(null, f.push.bind(f));
+```
+
+The runtime _reads_ `f.push`, binds it, and reassigns `f.push`; its callback
+later re-invokes the captured value to pass every chunk down to the previous
+chain level. A single stable function returned from a `push` getter breaks
+this: the re-entry loops until the renderer OOMs (this happened during
+development; the scenario is pinned by a regression test). Ion therefore
+mirrors the chain — every assignment creates a fresh entry function that
+wraps the incoming factories and dispatches through the newly installed
+callback while freezing its own dispatch target. Each chunk passes every
+runtime exactly once and terminates in a plain buffered push.
+
+The page runs **several independent bundler runtimes** (main app, sentry,
+libdiscore, fast-connect) that share the chunk global but each own a separate
+`__webpack_require__` and module cache. Discovery therefore collects every
+require observed in factory calls and searches all of them. Ids collide across
+runtimes, so patch decisions are keyed by factory object, never by id.
+
+`packages/core/src/webpack` exposes a Vencord-shaped API: `find`, `findAll`,
+`findByProps`, `findByCode`, `findStore`, `findModuleId`, `findModuleFactory`,
+`search`, `waitFor`, plus `*Lazy` variants backed by `proxyLazy` (re-evaluated
+per access until the module exists). Failed finds log a warning naming the
+lookup and its arguments, then return `null` — they never throw. When plugins
+land, patches must be registered before Discord evaluates its modules (core
+boot); late patches only ever affect factories that have not run, the same
+rule upstream follows.
+
+## Patch engine
+
+`packages/core/src/patches.ts` is a pure engine whose format and semantics
+mirror Vencord's and Equicord's public `Patch` type so their patches port
+one-to-one: `find` locates the module by source, `replacement`s transform it
+sequentially, `group` makes a patch all-or-nothing, `all` lets it apply to
+many modules (otherwise it is consumed by the first module it patches),
+`predicate` disables a patch at registration, and `fromBuild`/`toBuild` gate
+on the Discord build number once one is known.
+
+The engine cannot throw and never evaluates. The webpack runtime rebuilds a
+patched factory from source text with eval (Discord's CSP ships
+`unsafe-eval`; this is also how upstream mods rebuild factories) and asks the
+engine to validate after every replacement, so a syntactically broken step is
+attributed to the exact plugin and replacement that broke it. Any failure —
+rebuild error, patched factory throwing at runtime — logs an error naming the
+plugin and falls back to the original factory; the client keeps working.
+`\i` identifier canonicalization is supported; `#{intl::}` expansion needs
+Discord's message-hash runtime and is deferred to the Vencord compat layer.

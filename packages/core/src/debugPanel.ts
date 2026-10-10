@@ -12,7 +12,13 @@
  * to a floating button above the user panel area after a deadline.
  */
 
+import type { IonWebpackStatus } from "./platform/shell";
+
 const HOST_TAG = "ion-debug-host";
+
+/** Latest webpack status and the mounted root, so polls can update the panel. */
+let latestWebpack: IonWebpackStatus | undefined;
+let panelRoot: ShadowRoot | undefined;
 const GEAR_SELECTOR = '[aria-label="User Settings"]';
 const DOCK_DEADLINE_MS = 20_000;
 
@@ -119,6 +125,7 @@ const SHADOW_HTML = `
   <div class="row"><span>Status</span><b data-field="status">—</b></div>
   <div class="row"><span>Injection</span><b data-field="injection">—</b></div>
   <div class="row"><span>Shell</span><b data-field="shell">—</b></div>
+  <div class="row"><span>Webpack</span><b data-field="webpack">starting…</b></div>
 </div>
 `;
 
@@ -131,6 +138,19 @@ function setError(root: ShadowRoot, text: string): void {
   setField(root, "status", text);
   const dot = root.querySelector<HTMLElement>(".dot");
   if (dot) dot.dataset["state"] = "error";
+}
+
+function formatWebpack(status: IonWebpackStatus): string {
+  if (!status.hooked) return "not hooked";
+  if (!status.ready) return "starting…";
+  const finds = status.byProps && status.store ? "finds OK" : "finds pending";
+  return `${String(status.factories)} factories · ${finds}`;
+}
+
+/** Push a fresh webpack status into the panel (no-op before it mounts). */
+export function updateWebpackStatus(status: IonWebpackStatus): void {
+  latestWebpack = status;
+  if (panelRoot) setField(panelRoot, "webpack", formatWebpack(status));
 }
 
 function setPanelOpen(root: ShadowRoot, open: boolean): void {
@@ -176,6 +196,8 @@ function boot(): void {
   const host = document.createElement(HOST_TAG);
   const root = host.attachShadow({ mode: "open" });
   root.innerHTML = SHADOW_HTML;
+  panelRoot = root;
+  if (latestWebpack) setField(root, "webpack", formatWebpack(latestWebpack));
 
   const trigger = root.querySelector<HTMLButtonElement>(".trigger");
   const panel = root.querySelector<HTMLElement>(".panel");
