@@ -13,7 +13,8 @@
       {
         "entry": "src/index.ts",
         "outfile": "dist/index.js",
-        "platform": "browser"
+        "platform": "browser",
+        "format": "iife"
       }
     ]
   },

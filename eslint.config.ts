@@ -51,8 +51,8 @@ export default defineConfig(
     },
   },
   {
-    // The main process legitimately logs to stdout for diagnostics.
-    files: ["packages/shell-desktop/src/main/**/*.ts"],
+    // The shell (main + preload) legitimately reports to stdout/devtools.
+    files: ["packages/shell-desktop/src/**/*.ts"],
     rules: { "no-console": "off" },
   },
   {

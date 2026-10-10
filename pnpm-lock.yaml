@@ -59,6 +59,10 @@ importers:
   packages/core: {}
 
   packages/shell-desktop:
+    dependencies:
+      '@ion/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       electron:
         specifier: ^44.7.0

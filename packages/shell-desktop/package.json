@@ -35,5 +35,8 @@
   },
   "devDependencies": {
     "electron": "^44.7.0"
+  },
+  "dependencies": {
+    "@ion/core": "workspace:*"
   }
 }

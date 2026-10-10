@@ -88,3 +88,31 @@ export function sanitizeShellSettings(raw: unknown): ShellSettings {
     extraChromiumFlags: pickStringArray(source["extraChromiumFlags"], defaults.extraChromiumFlags),
   };
 }
+
+const SHELL_SETTING_KEYS = Object.keys(DEFAULT_SHELL_SETTINGS) as (keyof ShellSettings)[];
+
+export function isShellSettingKey(key: string): key is keyof ShellSettings {
+  return (SHELL_SETTING_KEYS as readonly string[]).includes(key);
+}
+
+/**
+ * Validate a `{key, value}` update from the renderer.
+ *
+ * Returns the full settings object with the patch applied, or null when the
+ * key is unknown or the value would not survive sanitization (wrong type,
+ * bad enum member, non-string array entries).
+ */
+export function applyShellSettingsPatch(
+  current: ShellSettings,
+  key: string,
+  value: unknown,
+): ShellSettings | null {
+  if (!isShellSettingKey(key)) return null;
+  const candidate = sanitizeShellSettings({ ...current, [key]: value });
+  const survived = candidate[key];
+  const accepted =
+    typeof value === "object" && value !== null
+      ? JSON.stringify(survived) === JSON.stringify(value)
+      : survived === value;
+  return accepted ? candidate : null;
+}

@@ -28,14 +28,22 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
   async function finish(reason: string): Promise<void> {
     clearTimeout(timer);
     const contents = win.webContents;
-    const preloadCheck: unknown = await contents
-      .executeJavaScript("typeof window.ionShell === 'object' && window.ionShell !== null")
-      .catch((error: unknown): unknown => String(error));
+    const probe = async (expression: string): Promise<unknown> =>
+      contents.executeJavaScript(expression).catch((error: unknown): unknown => String(error));
     const report = {
       reason,
       url: contents.getURL(),
       title: contents.getTitle(),
-      ionShellPreload: preloadCheck,
+      ionShellPreload: await probe(
+        "typeof window.ionShell === 'object' && window.ionShell !== null",
+      ),
+      coreInjected: await probe(
+        "window.__ION__ !== undefined && typeof window.__ION__.version === 'string'",
+      ),
+      debugPanelMounted: await probe(
+        "document.getElementsByTagName('ion-debug-host').length === 1",
+      ),
+      coreStartMs: await probe("window.__ION__ ? Math.round(window.__ION__.startedAt) : -1"),
     };
     const image = await contents.capturePage().catch(() => null);
     if (image && !image.isEmpty()) {

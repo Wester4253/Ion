@@ -9,6 +9,7 @@ import { app } from "electron";
 import type { BrowserWindow } from "electron";
 
 import { buildChromiumSwitchPlan } from "./flags";
+import { registerIpcHandlers } from "./ipc";
 import { registerPermissionHandlers } from "./permissions";
 import { registerScreenShareHandler } from "./screenshare";
 import { parseSmokeArg, runSmoke } from "./smoke";
@@ -40,6 +41,8 @@ if (!hasLock) {
   void app.whenReady().then(() => {
     registerPermissionHandlers();
     registerScreenShareHandler();
+    // Before the window: the preload synchronously fetches the core bundle.
+    registerIpcHandlers({ settings });
 
     mainWin = createMainWindow({
       settings,

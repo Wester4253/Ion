@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import { buildChromiumSwitchPlan, parseRawFlag } from "./flags";
-import { DEFAULT_SHELL_SETTINGS, sanitizeShellSettings } from "./settingsSchema";
+import {
+  applyShellSettingsPatch,
+  DEFAULT_SHELL_SETTINGS,
+  sanitizeShellSettings,
+} from "./settingsSchema";
 import type { ShellSettings } from "./settingsSchema";
 
 function overrides(patch: Partial<ShellSettings>): ShellSettings {
@@ -115,5 +119,39 @@ describe("sanitizeShellSettings", () => {
     expect(result.gpuMode).toBe("auto");
     expect(result.extraChromiumFlags).toEqual(["ok"]);
     expect("unknownKey" in result).toBe(false);
+  });
+});
+
+describe("applyShellSettingsPatch", () => {
+  test("accepts valid patches", () => {
+    const patched = applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "closeToTray", false);
+    expect(patched?.closeToTray).toBe(false);
+
+    const patchedList = applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "extraChromiumFlags", [
+      "--foo",
+    ]);
+    expect(patchedList?.extraChromiumFlags).toEqual(["--foo"]);
+  });
+
+  test("refuses unknown keys", () => {
+    expect(applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "evalEnabled", true)).toBeNull();
+    expect(applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "__proto__", {})).toBeNull();
+    expect(applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "constructor", {})).toBeNull();
+  });
+
+  test("refuses values that fail sanitization", () => {
+    expect(applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "closeToTray", "yes")).toBeNull();
+    expect(applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "ozonePlatform", "beos")).toBeNull();
+    expect(
+      applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "extraChromiumFlags", [1, 2]),
+    ).toBeNull();
+    expect(
+      applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "extraChromiumFlags", "not-an-array"),
+    ).toBeNull();
+  });
+
+  test("leaves other settings untouched", () => {
+    const patched = applyShellSettingsPatch(DEFAULT_SHELL_SETTINGS, "trayEnabled", false);
+    expect(patched).toEqual({ ...DEFAULT_SHELL_SETTINGS, trayEnabled: false });
   });
 });
