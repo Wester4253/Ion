@@ -4,7 +4,9 @@ Ion is a lightweight, Linux-first Discord client mod. It runs Discord's web clie
 hardened Electron window and loads plugins and themes from the wider modding ecosystem:
 Vencord and Equicord first, then BetterDiscord, then Shelter.
 
-Status: early development. Phase 0 (scaffolding) only. Nothing is usable as a client yet.
+Status: early development. Phase 1 (desktop shell) is done: a secure Electron
+window loads Discord's official web client with tray, single-instance lock, and
+persisted window state. Plugin and theme support is not built yet.
 
 ## Goals
 
@@ -41,11 +43,31 @@ ESLint enforces this.
 
 ```sh
 pnpm install
+pnpm build      # one-off build of every package
 pnpm dev        # esbuild watch mode for every package
-pnpm build      # one-off build
+pnpm start      # run the app (build first)
 pnpm typecheck
 pnpm lint
 pnpm test
+```
+
+### Run it
+
+```sh
+pnpm install && pnpm build
+pnpm start
+```
+
+The first launch opens `https://discord.com/app` in a secure Electron window —
+log in with your normal Discord account. Closing the window hides it to the
+tray; quit from the tray menu. Shell settings live in
+`~/.config/Ion/ion/shell.json` (see [docs/linux.md](docs/linux.md)).
+
+Headless smoke check (loads Discord, screenshots, writes a report, exits):
+
+```sh
+pnpm start -- --ion-smoke=/tmp/ion-smoke
+cat /tmp/ion-smoke/report.json
 ```
 
 Git hooks are installed by `pnpm install` and run `lint-staged` on commit.

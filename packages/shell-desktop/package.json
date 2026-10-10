@@ -1,0 +1,39 @@
+{
+  "name": "@ion/shell-desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Electron desktop shell: main process, preload, window, tray, IPC.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "ion": {
+    "bundles": [
+      {
+        "entry": "src/main/index.ts",
+        "outfile": "dist/main.cjs",
+        "platform": "node",
+        "format": "cjs",
+        "external": [
+          "electron"
+        ]
+      },
+      {
+        "entry": "src/preload/index.ts",
+        "outfile": "dist/preload.cjs",
+        "platform": "node",
+        "format": "cjs",
+        "external": [
+          "electron"
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node ../../scripts/bundle.mjs",
+    "dev": "node ../../scripts/bundle.mjs --watch",
+    "start": "electron dist/main.cjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0"
+  }
+}
