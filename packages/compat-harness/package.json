@@ -1,0 +1,22 @@
+{
+  "name": "@ion/compat-harness",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test tooling that bulk-loads plugins and produces the compatibility report.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "ion": {
+    "bundles": [
+      {
+        "entry": "src/index.ts",
+        "outfile": "dist/index.js",
+        "platform": "node"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node ../../scripts/bundle.mjs",
+    "dev": "node ../../scripts/bundle.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

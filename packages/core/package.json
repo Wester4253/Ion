@@ -1,0 +1,25 @@
+{
+  "name": "@ion/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Platform-neutral core: module discovery, patch engine, plugin host, settings, themes, catalog, logging.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "ion": {
+    "bundles": [
+      {
+        "entry": "src/index.ts",
+        "outfile": "dist/index.js",
+        "platform": "browser"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node ../../scripts/bundle.mjs",
+    "dev": "node ../../scripts/bundle.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}
