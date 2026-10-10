@@ -38,6 +38,8 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     minHeight: MIN_HEIGHT,
     show: true,
     backgroundColor: "#313338",
+    // Hide the File/Edit/View menu bar; Alt still reveals it.
+    autoHideMenuBar: true,
     icon: nativeImage.createFromPath(join(__dirname, "..", "assets", "icon.png")),
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
