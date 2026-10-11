@@ -23,10 +23,12 @@ interface WindowOptions {
   readonly settings: ShellSettingsStore;
   /** Called when the user chooses Quit from the tray (bypasses close-to-tray). */
   readonly requestQuit: () => void;
+  /** Start with the window unmapped (smoke runs); it still renders offscreen. */
+  readonly hidden?: boolean;
 }
 
 export function createMainWindow(options: WindowOptions): BrowserWindow {
-  const { settings, requestQuit } = options;
+  const { settings, requestQuit, hidden } = options;
   const displays = screen.getAllDisplays().map((display) => ({ bounds: display.bounds }));
   const state = loadWindowState(windowStatePath(), displays);
 
@@ -36,7 +38,7 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     ...(state.bounds ? { x: state.bounds.x, y: state.bounds.y } : {}),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    show: true,
+    show: !hidden,
     backgroundColor: "#313338",
     // Hide the File/Edit/View menu bar; Alt still reveals it.
     autoHideMenuBar: true,
@@ -50,6 +52,9 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
       spellcheck: true,
       // Keep Discord's voice connection and animations alive in the background.
       backgroundThrottling: false,
+      // Smoke runs never map a window; render offscreen so frames still
+      // commit and screenshots reflect the current DOM.
+      ...(hidden ? { offscreen: true } : {}),
     },
   });
 

@@ -44,14 +44,16 @@ if (!hasLock) {
     // Before the window: the preload synchronously fetches the core bundle.
     registerIpcHandlers({ settings });
 
+    const smokeDir = parseSmokeArg(process.argv);
     mainWin = createMainWindow({
       settings,
       requestQuit: () => {
         app.quit();
       },
+      // Smoke runs never flash a window; it renders offscreen either way.
+      hidden: smokeDir !== null,
     });
 
-    const smokeDir = parseSmokeArg(process.argv);
     if (smokeDir) runSmoke(smokeDir, mainWin);
 
     mainWin.on("closed", () => {
