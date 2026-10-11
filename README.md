@@ -4,9 +4,12 @@ Ion is a lightweight, Linux-first Discord client mod. It runs Discord's web clie
 hardened Electron window and loads plugins and themes from the wider modding ecosystem:
 Vencord and Equicord first, then BetterDiscord, then Shelter.
 
-Status: early development. Phase 1 (desktop shell) is done: a secure Electron
-window loads Discord's official web client with tray, single-instance lock, and
-persisted window state. Plugin and theme support is not built yet.
+Status: early development. Phases 0–4 are done: a secure Electron shell loads
+Discord's official web client (tray, single-instance, persisted window state),
+the core injects before Discord's scripts with webpack module discovery and a
+Vencord-compatible patch engine, and the native plugin host runs bundled
+plugins (`plugins/diagnostics`) against a persisted settings store. Ecosystem
+plugin adapters, themes, and the catalog are not built yet.
 
 ## Goals
 
@@ -31,8 +34,9 @@ persisted window state. Plugin and theme support is not built yet.
 | `plugins/`                | Built-in native Ion plugins.                                |
 | `docs/`                   | Architecture, authoring guides, compat status, catalog.     |
 
-Dependency direction is strict: shells and adapters depend on core, and core depends on nothing.
-ESLint enforces this.
+Dependency direction is strict: shells and adapters depend on core, and core
+depends on nothing but the built-in `@ion/plugin-*` packages (type-only links
+back from them). ESLint enforces this.
 
 ## Requirements
 

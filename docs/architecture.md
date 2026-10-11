@@ -55,6 +55,34 @@ variables only) showing injection time, shell version, bridge state, and live
 webpack-discovery status. It is a diagnostic: the product UI lives in
 `packages/ui`.
 
+## Settings store and plugin host
+
+`packages/core/src/settings.ts` persists everything to one JSON document
+(`settings/core.json`) under the shell's scoped data directory: flat,
+dot-separated keys; the host owns `plugins.enabled.*` and every plugin gets a
+`plugin.<id>.*` namespace. Values live in memory — reads are synchronous —
+writes debounce 200 ms and serialize behind each other, and a failed write
+keeps the values and retries on the next change. Subscriptions fire per key.
+
+Boot timing is the point: the shell's file bridge is synchronous IPC behind a
+promise, so `await settings.load()` resolves within microtasks, before
+Discord's first script runs. Plugin patches therefore register knowing the
+user's persisted enabled state — the same guarantee that upstream mods get
+from synchronous localStorage settings.
+
+`packages/core/src/plugins.ts` hosts plugins whose manifest (`IonPlugin`)
+mirrors Vencord's definition. The host owns patch registration on the shared
+registry (attribution by plugin name, `removeByPlugin` on disable), the
+start/stop lifecycle, persisted enablement, and error isolation: a plugin
+that throws in `start()` is marked `failed` and logged without affecting any
+other plugin. Registration is exposed as `window.__ION__.plugins`
+(`register`/`list`/`setEnabled`/`status`/`subscribe`) for adapters and
+catalog-installed plugins; built-ins register through
+`core/src/bundledPlugins.ts` from `plugins/*` packages (type-only imports
+back into `@ion/core`, so the bundle stays acyclic). Honesty note: source
+patches are one-way once a module has evaluated — disabling removes remaining
+patches, but `stop()` owns runtime reversion of what already applied.
+
 ## Chunk hook and module discovery
 
 The core installs a hook on `window.webpackChunkdiscord_app` before any page
