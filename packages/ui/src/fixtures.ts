@@ -75,8 +75,9 @@ export const SETTINGS_MODAL_HTML = `
                 </nav>
               </div>
               <div class="contentBody_e9e3ed">
-                <div class="scroller__6131a scrollerBase_d125d2">
-                  <div class="section__6131a">native settings content</div>
+                <div class="scroller__6131a scrollbarGutter_d125d2 scrollerBase_d125d2">
+                  <div class="panel__6131a">native settings content</div>
+                  <div class="bottomMarker__6131a"></div>
                 </div>
               </div>
             </div>

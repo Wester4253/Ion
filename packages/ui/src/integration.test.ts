@@ -85,11 +85,16 @@ describe("startSettingsIntegration", () => {
     openSettings(doc);
     await flush();
 
+    const scroller = doc.querySelector<HTMLElement>("[class*=scroller]");
+    if (scroller) scroller.scrollTop = 120; // simulate a scrolled native page
     ourRow(doc)?.querySelector<HTMLElement>("[role=link]")?.click();
     expect(integration.active).toBe(true);
 
-    const scroller = doc.querySelector<HTMLElement>("[class*=scroller]");
-    expect(scroller?.style.display).toBe("none");
+    // The scroller stays visible; its own content is hidden instead, and our
+    // host renders inside it with the scroll position reset.
+    expect(scroller?.style.display).toBe("");
+    expect(scroller?.querySelector<HTMLElement>("[class*=panel]")?.style.display).toBe("none");
+    expect(scroller?.scrollTop).toBe(0);
 
     const crumbText = crumb(doc);
     expect(crumbText?.textContent).toBe("Ion");
@@ -102,7 +107,7 @@ describe("startSettingsIntegration", () => {
     expect(ours?.classList.contains("active_caf372")).toBe(true);
     expect(ours?.getAttribute("aria-current")).toBe("page");
 
-    const host = doc.querySelector<HTMLElement>("ion-settings-panel");
+    const host = scroller?.querySelector<HTMLElement>("ion-settings-panel");
     expect(host?.isConnected).toBe(true);
     expect(host?.getAttribute("data-rendered")).toBe("true");
     expect(renderedHosts).toHaveLength(1);
@@ -123,6 +128,7 @@ describe("startSettingsIntegration", () => {
     expect(integration.active).toBe(false);
     const scroller = doc.querySelector<HTMLElement>("[class*=scroller]");
     expect(scroller?.style.display).toBe("");
+    expect(scroller?.querySelector<HTMLElement>("[class*=panel]")?.style.display).toBe("");
     expect(crumb(doc)?.textContent).toBe("Account");
 
     const native = nativeRow(doc, "account_panel")?.querySelector<HTMLElement>("[role=link]");
@@ -145,14 +151,16 @@ describe("startSettingsIntegration", () => {
     const body = doc.querySelector<HTMLElement>("[class*=contentBody]");
     const freshScroller = doc.createElement("div");
     freshScroller.className = "scroller__6131a";
+    freshScroller.innerHTML = `<div class="panel__6131a">fresh content</div>`;
     doc.querySelector("[class*=scroller]")?.remove();
     body?.prepend(freshScroller);
     doc.querySelector("ion-settings-panel")?.remove();
     await flush();
 
     expect(integration.active).toBe(true);
-    expect(freshScroller.style.display).toBe("none");
-    expect(doc.querySelector("ion-settings-panel")?.isConnected).toBe(true);
+    expect(freshScroller.style.display).toBe("");
+    expect(freshScroller.querySelector<HTMLElement>("[class*=panel]")?.style.display).toBe("none");
+    expect(freshScroller.querySelector("ion-settings-panel")?.isConnected).toBe(true);
 
     integration.stop();
   });
@@ -208,7 +216,7 @@ describe("startSettingsIntegration", () => {
 
     expect(integration.active).toBe(true);
     const newScroller = fresh.querySelector<HTMLElement>("[class*=scroller]");
-    expect(newScroller?.style.display).toBe("none");
+    expect(newScroller?.style.display).toBe("");
     expect(fresh.querySelector("ion-settings-panel")).not.toBeNull();
     expect(renderedHosts.length).toBeGreaterThan(1);
 

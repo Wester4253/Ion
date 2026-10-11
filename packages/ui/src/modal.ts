@@ -18,9 +18,9 @@ export interface SettingsDom {
   readonly sidebarItems: HTMLElement;
   /** Best sidebar item to clone: prefer one without a sub-navigation. */
   readonly templateItem: HTMLElement;
-  /** Content container our panel host is appended to. */
+  /** Content container that owns the header and body regions. */
   readonly contentBody: HTMLElement;
-  /** The native content scroller; hidden while our tab is active. */
+  /** The native content scroller — our panel renders inside it when active. */
   readonly scroller: HTMLElement;
   /** The breadcrumb's text element, mutated in place. Null when absent. */
   readonly breadcrumbText: HTMLElement | null;
