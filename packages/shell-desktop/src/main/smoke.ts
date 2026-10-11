@@ -109,13 +109,16 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
       ionPanelRows: await probe(
         "(() => { const host = document.querySelector('[class*=contentBody] ion-settings-panel'); return host?.shadowRoot?.querySelectorAll('.ion-row').length ?? 0; })()",
       ),
+      ionPanelInScroller: await probe(
+        "(() => { const host = document.querySelector('ion-settings-panel'); const scroller = host?.closest('[class*=scroller]'); return { inScroller: Boolean(scroller), scrollerVisible: scroller ? scroller.style.display !== 'none' : null, nativeContentHidden: scroller ? [...scroller.children].every((c) => c === host || c.style.display === 'none') : null }; })()",
+      ),
     };
     // Watch the panel state settle: reveals flicker between probes and capture.
     const ionPanelTimeline: unknown[] = [];
     for (let i = 0; i < 4; i += 1) {
       ionPanelTimeline.push(
         await probe(
-          "(() => { const host = document.querySelector('[class*=contentBody] ion-settings-panel'); const scroller = document.querySelector('[class*=contentBody] [class*=scroller]'); return { tabRow: !!document.querySelector('li[data-settings-sidebar-item=\"ion_panel\"]'), panel: !!host, scrollerHidden: scroller ? scroller.style.display === 'none' : null }; })()",
+          "(() => { const host = document.querySelector('ion-settings-panel'); const scroller = document.querySelector('[class*=contentBody] [class*=scroller]'); return { tabRow: !!document.querySelector('li[data-settings-sidebar-item=\"ion_panel\"]'), panel: !!host, scrollerVisible: scroller ? scroller.style.display !== 'none' : null, nativeContentHidden: scroller && host ? [...scroller.children].every((c) => c === host || c.style.display === 'none') : null }; })()",
         ),
       );
       await delay(400);
@@ -126,6 +129,31 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
     if (image && !image.isEmpty()) {
       writeFileSync(join(outputDir, "screenshot.png"), image.toPNG());
     }
+    // Bring a panel select into view, open it, and verify the menu escapes
+    // the scroller's clipping and stays anchored to its trigger. (Scroll and
+    // click are separate steps so the scroll event cannot dismiss the menu
+    // we open immediately afterwards.)
+    report["ionSelectInView"] = await probe(
+      "(() => { const host = document.querySelector('[class*=contentBody] ion-settings-panel'); const trigger = host?.shadowRoot?.querySelector('[aria-label=\"Display server\"]'); if (!trigger) return false; trigger.scrollIntoView({ block: 'center' }); return true; })()",
+    );
+    await delay(400);
+    report["ionSelectOpen"] = await probe(
+      "(() => { const host = document.querySelector('[class*=contentBody] ion-settings-panel'); const trigger = host?.shadowRoot?.querySelector('[aria-label=\"Display server\"]'); if (!trigger) return false; trigger.click(); return true; })()",
+    );
+    await delay(400);
+    report["ionSelectMenu"] = await probe(
+      "(() => { const host = document.querySelector('[class*=contentBody] ion-settings-panel'); const shadow = host?.shadowRoot; const menu = shadow?.querySelector('.ion-select-menu'); const trigger = shadow?.querySelector('[aria-label=\"Display server\"]'); if (!menu || !trigger) return null; const m = menu.getBoundingClientRect(); const t = trigger.getBoundingClientRect(); const anchored = (Math.abs(m.top - (t.bottom + 4)) <= 2 || Math.abs(m.bottom - (t.top - 4)) <= 2) && Math.abs(m.left - t.left) <= 2; return { position: getComputedStyle(menu).position, anchored, below: m.top > t.bottom, withinViewport: m.top >= 0 && m.bottom <= window.innerHeight && m.left >= 0 && m.right <= window.innerWidth }; })()",
+    );
+    const selectImage = await contents.capturePage().catch(() => null);
+    if (selectImage && !selectImage.isEmpty()) {
+      writeFileSync(join(outputDir, "screenshot-select.png"), selectImage.toPNG());
+    }
+    // Escape must dismiss the menu (no side effects left behind).
+    await probe("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
+    await delay(200);
+    report["ionSelectEscapeClosed"] = await probe(
+      "(() => { const host = document.querySelector('[class*=contentBody] ion-settings-panel'); return host?.shadowRoot?.querySelector('.ion-select-menu') === null; })()",
+    );
     writeFileSync(join(outputDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(report)}\n`);
     app.exit(0);
