@@ -106,22 +106,29 @@ Discord's own stable hooks and re-asserts its state:
 - **The lifecycle** (`integration.ts`) observes the document (childList plus
   an `aria-current` attribute filter) and reconciles idempotently: when the
   row is selected it strips the native row's active styling, hides the
-  content scroller, swaps the breadcrumb text in place, and mounts the panel
-  into `contentBody`; deactivation restores everything verbatim. Discord
+  scroller's own children (the scroller itself stays visible, so scrolling,
+  the scrollbar and the column geometry remain Discord's own), swaps the
+  breadcrumb text in place, and mounts the panel inside the native scroller;
+  deactivation restores every hidden node's inline display verbatim. Discord
   re-renders that replace nodes, re-apply active styling, or rebuild the
   content region mid-open are re-asserted — and a rebuild while our page is
   up puts the user back on our page instead of silently reverting.
 - **The panel** (`panel.tsx`) renders into a shadow root (document styles and
-  user themes cannot leak in or out) with `styles.ts` carrying the complete
-  look over Discord's CSS variables only — a unit test enforces that no
-  literal color ever appears. It hosts the plugin manager (driven by
-  `window.__ION__.plugins`), the shell settings (close-to-tray, tray, GPU,
-  platform, WebRTC policy — each honestly labeled when a restart is
-  required), and an About card.
+  user themes cannot leak in or out) with `styles.ts` reproducing Discord's
+  own settings anatomy, measured from the live client: the 696px content
+  column, flat sections on the modal's background, the 48×24 blurple switch,
+  and borderless select triggers whose menus render at a fixed viewport
+  position (re-based onto Discord's transformed modal root, which is the
+  fixed-position containing block) so they never clip against the scroller.
+  All color comes from Discord's current design tokens; a unit test enforces
+  that only Discord's own hardcoded literals appear. It hosts the plugin
+  manager (driven by `window.__ION__.plugins`), the shell settings
+  (close-to-tray, tray, GPU, platform, WebRTC policy — each honestly labeled
+  when a restart is required), and an About section.
 
 Everything is dependency-injected (document, plugin API, settings API,
 render callback), which is what makes the whole layer testable headlessly:
-the UI's 30 unit tests run against a DOM fixture captured from the real
+the UI's 33 unit tests run against a DOM fixture captured from the real
 client, and the smoke harness tours the settings page for real (see below).
 
 ## Headless smoke harness
@@ -130,9 +137,13 @@ client, and the smoke harness tours the settings page for real (see below).
 rendering mode, so frames still commit and `capturePage` reflects the current
 DOM), opens the settings modal by clicking the gear after our debug dock,
 selects the Ion tab, and reports probes: settings-structure sanity, tab/panel
-presence, panel row count, a settle timeline of the panel state, renderer
-errors captured from the console, then exits with `report.json` and a
-screenshot. This runs without ever showing a window, so it is safe on a
+presence, panel row count, that the panel lives inside the visible native
+scroller with Discord's own content hidden, a settle timeline of the panel
+state, renderer errors captured from the console, and a select-menu geometry
+check (the open menu must be fixed-positioned, anchored to its trigger and
+inside the viewport, then dismissed with Escape). It exits with
+`report.json` plus two screenshots — the panel at rest and the select menu
+open. This runs without ever showing a window, so it is safe on a
 developer's session. Electron 44's `--ozone-platform=headless` segfaults on
 this machine (a minimal app reproduces it), which is why the harness uses the
 hidden-window approach instead.
