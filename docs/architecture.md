@@ -83,6 +83,60 @@ back into `@ion/core`, so the bundle stays acyclic). Honesty note: source
 patches are one-way once a module has evaluated — disabling removes remaining
 patches, but `stop()` owns runtime reversion of what already applied.
 
+## In-Discord UI (settings page)
+
+`packages/ui` renders Ion's in-Discord UI with Preact and ships as a second
+IIFE that the shell appends to the core bundle, so both evaluate in one
+injection, in order, before Discord's scripts. `window.__ION__.ui.ready` flips
+to `true` only after the integration actually started.
+
+The settings page never patches Discord's React tree. Instead it keys on
+Discord's own stable hooks and re-asserts its state:
+
+- **Discovery** (`modal.ts`) is structural and localized-proof: the anchor is
+  `li[data-settings-sidebar-item]:not([data-ion-tab])` (Discord's stable
+  attribute; ours is excluded), sections/content/scroller/breadcrumb come
+  from class-name _substrings_ (`contentBody`, `scroller`) and ancestry, and
+  every function takes its `Document` as an argument.
+- **The sidebar row** (`tab.ts`) clones Discord's own markup — a section
+  wrapper plus one item row — replacing icon, label, ids and active state,
+  then prepends it so "Ion" sits above Account with Discord's listeners and
+  styling intact. The hashed active class (`active_caf372`) is captured at
+  runtime from whichever row carries `aria-current`, never hardcoded.
+- **The lifecycle** (`integration.ts`) observes the document (childList plus
+  an `aria-current` attribute filter) and reconciles idempotently: when the
+  row is selected it strips the native row's active styling, hides the
+  content scroller, swaps the breadcrumb text in place, and mounts the panel
+  into `contentBody`; deactivation restores everything verbatim. Discord
+  re-renders that replace nodes, re-apply active styling, or rebuild the
+  content region mid-open are re-asserted — and a rebuild while our page is
+  up puts the user back on our page instead of silently reverting.
+- **The panel** (`panel.tsx`) renders into a shadow root (document styles and
+  user themes cannot leak in or out) with `styles.ts` carrying the complete
+  look over Discord's CSS variables only — a unit test enforces that no
+  literal color ever appears. It hosts the plugin manager (driven by
+  `window.__ION__.plugins`), the shell settings (close-to-tray, tray, GPU,
+  platform, WebRTC policy — each honestly labeled when a restart is
+  required), and an About card.
+
+Everything is dependency-injected (document, plugin API, settings API,
+render callback), which is what makes the whole layer testable headlessly:
+the UI's 30 unit tests run against a DOM fixture captured from the real
+client, and the smoke harness tours the settings page for real (see below).
+
+## Headless smoke harness
+
+`--ion-smoke=<dir>` creates the main window **hidden** (and in offscreen
+rendering mode, so frames still commit and `capturePage` reflects the current
+DOM), opens the settings modal by clicking the gear after our debug dock,
+selects the Ion tab, and reports probes: settings-structure sanity, tab/panel
+presence, panel row count, a settle timeline of the panel state, renderer
+errors captured from the console, then exits with `report.json` and a
+screenshot. This runs without ever showing a window, so it is safe on a
+developer's session. Electron 44's `--ozone-platform=headless` segfaults on
+this machine (a minimal app reproduces it), which is why the harness uses the
+hidden-window approach instead.
+
 ## Chunk hook and module discovery
 
 The core installs a hook on `window.webpackChunkdiscord_app` before any page

@@ -12,6 +12,7 @@ file is rewritten at each phase boundary, not incrementally patched._
 | 2     | Injection, typed IPC bridge, restricted `require`  | Live-tested: core runs in main world at T+~110ms, debug panel docked next to Discord's settings gear               |
 | 3     | Webpack discovery + source-text patch engine       | Live-tested: chunk hook intercepts rspack's chain, 6k+ factories wrapped, `findStore("UserStore")` and friends hit |
 | 4     | Settings store + native plugin host                | Live-tested: bundled `ion.diagnostics` starts at boot (`1/1 started`), toggle/stop/patch-removal paths unit-tested |
+| 5     | In-Discord UI foundation (settings page)           | Live-tested headlessly: Ion tab injected into the real settings sidebar, plugin manager + app settings panel       |
 
 Design details live in [architecture.md](./architecture.md); writing plugins
 against the host in [plugin-authoring.md](./plugin-authoring.md); Linux
@@ -30,15 +31,17 @@ Expected: no menu bar; bolt icon between headphone and gear icons opens the
 Ion debug popover. `report.json` must show `ionShellPreload`, `coreInjected`,
 `debugPanelMounted` all `true`, `webpackStatus` with
 `hooked/ready/byProps/store` all `true` plus a few thousand `factories`
-(`debugPanelWebpack` reads e.g. `6280 factories · finds OK`), and
+(`debugPanelWebpack` reads e.g. `6280 factories · finds OK`),
 `pluginsStatus` with `registered: 1, started: 1, failed: 0` and
-`ids: ["ion.diagnostics:started"]` (`debugPanelPlugins` reads `1/1 started`).
-In the app itself, `Ctrl+Alt+J` should copy a diagnostics report to the
-clipboard.
+`ids: ["ion.diagnostics:started"]` (`debugPanelPlugins` reads `1/1 started`),
+and the settings-UI probes `uiReady`, `ionTabMounted`, `ionPanelActive` all
+`true` with `ionPanelRows > 0` and `rendererErrors: []`. The screenshot shows
+the Ion settings page — captured from a window that never appears on screen,
+so the smoke run is safe while using the computer. In the app itself,
+`Ctrl+Alt+J` should copy a diagnostics report to the clipboard.
 
 ## Next
 
-- Phase 5: in-Discord UI foundation — Preact settings + plugin manager in
-  `packages/ui`, plus locale-robust debug-dock anchoring.
+- Phase 6: Vencord/Equicord adapter (starter plugin list for owner approval).
 - Pending decision: Linux screenshare system audio (Electron has no loopback
   on Linux) — documented workaround, owner sign-off open.
