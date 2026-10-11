@@ -65,13 +65,18 @@ interface IpcContext {
 
 export function registerIpcHandlers(context: IpcContext): void {
   const { settings } = context;
-  const bundle = loadCoreBundle(process.env["ION_CORE_BUNDLE"], __dirname, (file) =>
-    readFileSync(file, "utf8"),
+  const bundle = loadCoreBundle(
+    process.env["ION_CORE_BUNDLE"],
+    process.env["ION_UI_BUNDLE"],
+    __dirname,
+    (file) => readFileSync(file, "utf8"),
   );
   if (!bundle.ok) {
     console.error(
       `[ion] core bundle not found (tried ${bundle.tried.join(", ")}): ${bundle.reason}`,
     );
+  } else if (!bundle.ui) {
+    console.error(`[ion] ui bundle not found — the Ion settings page will not be available`);
   }
   const coreSource = bundle.ok ? bundle.source : "";
 

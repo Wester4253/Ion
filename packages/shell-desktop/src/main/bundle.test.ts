@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { coreBundleCandidates, loadCoreBundle } from "./bundle";
+import { coreBundleCandidates, loadCoreBundle, uiBundleCandidates } from "./bundle";
 
 describe("coreBundleCandidates", () => {
   test("resolves the sibling workspace bundle", () => {
@@ -14,21 +14,31 @@ describe("coreBundleCandidates", () => {
   });
 });
 
+describe("uiBundleCandidates", () => {
+  test("resolves the sibling workspace bundle", () => {
+    const [only] = uiBundleCandidates(undefined, "/repo/packages/shell-desktop/dist");
+    expect(only).toMatch(/packages\/ui\/dist\/index\.js$/);
+  });
+
+  test("env override takes priority", () => {
+    const [first] = uiBundleCandidates("/opt/ion/ui.js", "/repo/packages/shell-desktop/dist");
+    expect(first).toBe("/opt/ion/ui.js");
+  });
+});
+
 describe("loadCoreBundle", () => {
+  const dist = "/repo/packages/shell-desktop/dist";
+
   test("returns the first readable candidate", () => {
-    const result = loadCoreBundle(
-      "/opt/ion/core.js",
-      "/repo/packages/shell-desktop/dist",
-      (file) => {
-        if (file === "/opt/ion/core.js") return "code";
-        throw new Error("missing");
-      },
-    );
-    expect(result).toEqual({ ok: true, source: "code", file: "/opt/ion/core.js" });
+    const result = loadCoreBundle("/opt/ion/core.js", undefined, dist, (file) => {
+      if (file === "/opt/ion/core.js") return "code";
+      throw new Error("missing");
+    });
+    expect(result).toEqual({ ok: true, source: "code", file: "/opt/ion/core.js", ui: false });
   });
 
   test("falls through to the workspace bundle", () => {
-    const result = loadCoreBundle(undefined, "/repo/packages/shell-desktop/dist", (file) => {
+    const result = loadCoreBundle(undefined, undefined, dist, (file) => {
       if (file.endsWith("core/dist/index.js")) return "workspace code";
       throw new Error("missing");
     });
@@ -36,8 +46,34 @@ describe("loadCoreBundle", () => {
     if (result.ok) expect(result.source).toBe("workspace code");
   });
 
+  test("appends the UI bundle after the core bundle", () => {
+    const result = loadCoreBundle("/opt/ion/core.js", "/opt/ion/ui.js", dist, (file) => {
+      if (file === "/opt/ion/core.js") return "core code";
+      if (file === "/opt/ion/ui.js") return "ui code";
+      throw new Error("missing");
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.ui).toBe(true);
+      expect(result.source).toBe("core code\n;\nui code");
+      expect(result.file).toBe("/opt/ion/core.js");
+    }
+  });
+
+  test("runs core-only when the UI bundle is absent", () => {
+    const result = loadCoreBundle("/opt/ion/core.js", "/opt/ion/ui.js", dist, (file) => {
+      if (file === "/opt/ion/core.js") return "core code";
+      throw new Error("missing");
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.ui).toBe(false);
+      expect(result.source).toBe("core code");
+    }
+  });
+
   test("reports every attempted path and the last reason", () => {
-    const result = loadCoreBundle("/opt/ion/core.js", "/repo/packages/shell-desktop/dist", () => {
+    const result = loadCoreBundle("/opt/ion/core.js", undefined, dist, () => {
       throw new Error("EACCES");
     });
     expect(result.ok).toBe(false);
@@ -48,7 +84,7 @@ describe("loadCoreBundle", () => {
   });
 
   test("treats an empty bundle as a failure", () => {
-    const result = loadCoreBundle("/opt/ion/core.js", "/repo/d", () => "");
+    const result = loadCoreBundle("/opt/ion/core.js", undefined, "/repo/d", () => "");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain("empty");
   });
