@@ -1,5 +1,5 @@
 import { h, render, type ComponentChildren, type VNode } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { IonPluginInfo, IonPluginsApi, IonWebpackStatus, ShellSettingsApi } from "@ion/core";
 import { PANEL_CSS } from "./styles";
 
@@ -21,7 +21,7 @@ interface PanelProps {
 /**
  * Renders the panel's markup into `host`'s shadow root. Shadow DOM keeps
  * Discord's document styles (and user themes) out of Ion's UI and vice versa;
- * everything visual comes from PANEL_CSS over Discord's own CSS variables.
+ * everything visual comes from PANEL_CSS over Discord's own design tokens.
  */
 export function mountPanel(host: HTMLElement, ports: PanelPorts): () => void {
   const doc = host.ownerDocument;
@@ -41,6 +41,10 @@ export function mountPanel(host: HTMLElement, ports: PanelPorts): () => void {
   };
 }
 
+/**
+ * Discord's switch anatomy: a 48x24 pill with a 16px thumb that slides
+ * between the two ends. State reads from aria-checked, like Discord's own.
+ */
 function Switch(props: {
   readonly label: string;
   readonly checked: boolean;
@@ -59,7 +63,7 @@ function Switch(props: {
         props.onChange(!props.checked);
       }}
     >
-      <span class="ion-switch-knob" />
+      <span class="ion-switch-thumb" />
     </button>
   );
 }
@@ -74,7 +78,7 @@ const CHEVRON_SVG = (
 );
 
 const CHECK_SVG = (
-  <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
     <path
       fill="currentColor"
       d="M9.55 18.2 3.4 12.05l1.4-1.4 4.75 4.75L19.2 5.8l1.4 1.4L9.55 18.2Z"
@@ -82,6 +86,58 @@ const CHECK_SVG = (
   </svg>
 );
 
+/** Menu placement, in the fixed coordinate system's own units, measured from the trigger. */
+interface MenuPosition {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+}
+
+/**
+ * Finds the origin of the coordinate system `position: fixed` resolves
+ * against. Inside Discord's settings modal that is not the viewport: the
+ * modal root carries an identity transform, which makes it the containing
+ * block for fixed descendants (the observed cause of menus rendering ~40px
+ * off their anchors). Walks up through shadow boundaries to the first
+ * ancestor that establishes such a containing block.
+ */
+function fixedOrigin(element: Element): { left: number; top: number } {
+  const view = element.ownerDocument.defaultView;
+  let node: Element | null = element;
+  while (node !== null) {
+    const style = view?.getComputedStyle(node);
+    if (style) {
+      const willChange = style.willChange;
+      const establishes =
+        style.transform !== "none" ||
+        style.filter !== "none" ||
+        style.perspective !== "none" ||
+        willChange.includes("transform") ||
+        willChange.includes("filter") ||
+        willChange.includes("perspective");
+      if (establishes) {
+        const rect = node.getBoundingClientRect();
+        return { left: rect.left + node.clientLeft, top: rect.top + node.clientTop };
+      }
+    }
+    const parent: Element | null = node.parentElement;
+    if (parent !== null) {
+      node = parent;
+      continue;
+    }
+    const root: Node = node.getRootNode();
+    node = root instanceof ShadowRoot ? root.host : null;
+  }
+  return { left: 0, top: 0 };
+}
+
+/**
+ * Discord's select: a borderless trigger whose menu renders at a fixed
+ * viewport position anchored below it — immune to the settings scroller's
+ * clipping. Arrow keys move between options, Enter picks, Escape cancels,
+ * and the menu closes on outside clicks and on any scroll (matching how
+ * Discord dismisses its own popouts).
+ */
 function Select(props: {
   readonly label: string;
   readonly value: string;
@@ -89,43 +145,141 @@ function Select(props: {
   readonly onChange: (value: string) => void;
 }): VNode {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<MenuPosition | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+
+  const selectedIndex = Math.max(
+    0,
+    props.options.findIndex(([value]) => value === props.value),
+  );
+
+  const openMenu = (): void => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const view = trigger.ownerDocument.defaultView;
+    const rect = trigger.getBoundingClientRect();
+    const origin = fixedOrigin(trigger);
+    const width = Math.max(Math.round(rect.width), 200);
+    // Options never wrap, so the menu's height is known before rendering:
+    // flip above the trigger when the list would not fit below it.
+    const height = props.options.length * 40 + 10;
+    const belowTop = rect.bottom + 4;
+    const top =
+      belowTop + height > (view?.innerHeight ?? Number.POSITIVE_INFINITY) &&
+      rect.top - 4 - height >= 0
+        ? rect.top - 4 - height
+        : belowTop;
+    // Keep the menu inside the viewport horizontally.
+    const viewportLeft = Math.max(8, Math.min(rect.left, (view?.innerWidth ?? 0) - width - 8));
+    setPosition({
+      left: Math.round(viewportLeft) - Math.round(origin.left),
+      top: Math.round(top) - Math.round(origin.top),
+      width,
+    });
+    setActiveIndex(selectedIndex);
+    setOpen(true);
+  };
+
+  const close = (restoreFocus: boolean): void => {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
-    const close = (event: Event): void => {
+    const onDocumentClick = (event: Event): void => {
       // At document level a shadow click retargets to the host, so inspect
       // the composed path — it reaches back through the shadow tree.
       const inside = event
         .composedPath()
         .some((node) => node instanceof Element && node.classList.contains("ion-select-wrap"));
-      if (inside) return;
-      setOpen(false);
+      if (!inside) close(false);
     };
-    document.addEventListener("click", close, true);
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") close(true);
+      else if (event.key === "Tab") close(false);
+    };
+    // A scrolled page moves the trigger; drop the menu rather than let it
+    // drift, which is how Discord treats its own anchored popouts.
+    const onScroll = (): void => {
+      close(false);
+    };
+    const onResize = (): void => {
+      close(false);
+    };
+    document.addEventListener("click", onDocumentClick, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
-      document.removeEventListener("click", close, true);
+      document.removeEventListener("click", onDocumentClick, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
-  const current = props.options.find(([value]) => value === props.value)?.[1] ?? props.value;
+  useEffect(() => {
+    if (!open) return;
+    const option =
+      menuRef.current?.querySelectorAll<HTMLButtonElement>(".ion-select-option")[activeIndex];
+    option?.focus({ preventScroll: true });
+  }, [open, activeIndex]);
+
+  const onMenuKeyDown = (event: KeyboardEvent): void => {
+    const count = props.options.length;
+    if (count === 0) return;
+    let next: number | null = null;
+    if (event.key === "ArrowDown") next = (activeIndex + 1) % count;
+    else if (event.key === "ArrowUp") next = (activeIndex - 1 + count) % count;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = count - 1;
+    if (next === null) return;
+    event.preventDefault();
+    setActiveIndex(next);
+  };
+
+  const current = props.options[selectedIndex]?.[1] ?? props.value;
 
   return (
     <div class="ion-select-wrap">
       <button
         type="button"
         class="ion-select"
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={props.label}
+        ref={triggerRef}
         onClick={() => {
-          setOpen((wasOpen) => !wasOpen);
+          if (open) close(false);
+          else openMenu();
+        }}
+        onKeyDown={(event) => {
+          if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+            event.preventDefault();
+            openMenu();
+          }
         }}
       >
         <span class="ion-select-label">{current}</span>
         <span class="ion-select-chevron">{CHEVRON_SVG}</span>
       </button>
-      {open && (
-        <ul class="ion-select-menu" role="listbox" aria-label={props.label}>
+      {open && position && (
+        <ul
+          class="ion-select-menu"
+          role="listbox"
+          aria-label={props.label}
+          ref={menuRef}
+          style={{
+            left: `${String(position.left)}px`,
+            top: `${String(position.top)}px`,
+            minWidth: `${String(position.width)}px`,
+          }}
+          onKeyDown={onMenuKeyDown}
+        >
           {props.options.map(([value, label]) => (
             <li key={value}>
               <button
@@ -135,10 +289,10 @@ function Select(props: {
                 aria-selected={value === props.value}
                 onClick={() => {
                   props.onChange(value);
-                  setOpen(false);
+                  close(true);
                 }}
               >
-                <span>{label}</span>
+                <span class="ion-select-label">{label}</span>
                 {value === props.value && CHECK_SVG}
               </button>
             </li>
@@ -149,10 +303,10 @@ function Select(props: {
   );
 }
 
-function Card(props: { readonly title: string; readonly children: ComponentChildren }): VNode {
+function Section(props: { readonly title: string; readonly children: ComponentChildren }): VNode {
   return (
-    <section class="ion-card">
-      <h2 class="ion-card-title">{props.title}</h2>
+    <section class="ion-section">
+      <h2 class="ion-section-title">{props.title}</h2>
       {props.children}
     </section>
   );
@@ -174,7 +328,7 @@ function Row(props: {
   );
 }
 
-function PluginsCard({ ports }: PanelProps): VNode {
+function PluginsSection({ ports }: PanelProps): VNode {
   const [plugins, setPlugins] = useState<readonly IonPluginInfo[]>(() => ports.plugins.list());
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
@@ -201,7 +355,7 @@ function PluginsCard({ ports }: PanelProps): VNode {
   };
 
   return (
-    <Card title="Plugins">
+    <>
       {plugins.length === 0 && <div class="ion-empty">No plugins registered.</div>}
       {plugins.map((plugin) => (
         <Row
@@ -233,7 +387,7 @@ function PluginsCard({ ports }: PanelProps): VNode {
         />
       ))}
       {toggleError && <div class="ion-row-error ion-empty">{toggleError}</div>}
-    </Card>
+    </>
   );
 }
 
@@ -310,12 +464,12 @@ function restartHint(row: AppSettingRow): ComponentChildren {
   return (
     <>
       {row.description}
-      {row.restart && <span class="ion-restart">· Restart to apply</span>}
+      {row.restart && <span class="ion-restart"> · Restart to apply</span>}
     </>
   );
 }
 
-function AppCard({ ports }: PanelProps): VNode {
+function AppSection({ ports }: PanelProps): VNode {
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -356,7 +510,7 @@ function AppCard({ ports }: PanelProps): VNode {
   const disabled = values === null;
 
   return (
-    <Card title="App">
+    <>
       {loadError && <div class="ion-row-error ion-empty">{loadError}</div>}
       {TOGGLE_SETTINGS.map((row) => (
         <Row
@@ -392,13 +546,13 @@ function AppCard({ ports }: PanelProps): VNode {
           }
         />
       ))}
-    </Card>
+    </>
   );
 }
 
 const ION_REPOSITORY = "https://github.com/Wester4253/Ion";
 
-function AboutCard({ ports }: PanelProps): VNode {
+function AboutSection({ ports }: PanelProps): VNode {
   const [linkError, setLinkError] = useState<string | null>(null);
   const webpack = ports.webpackStatus();
 
@@ -412,7 +566,7 @@ function AboutCard({ ports }: PanelProps): VNode {
   };
 
   return (
-    <Card title="About">
+    <>
       <Row label="Ion" description={`Version ${ports.version}`} trailing={<span />} />
       <Row label="Shell" description={`Electron ${ports.shellVersion}`} trailing={<span />} />
       <Row
@@ -436,17 +590,25 @@ function AboutCard({ ports }: PanelProps): VNode {
         }
         trailing={<span />}
       />
-    </Card>
+    </>
   );
 }
 
 function Panel({ ports }: PanelProps): VNode {
   return (
     <div class="ion-page">
-      <h1 class="ion-title">Ion</h1>
-      <PluginsCard ports={ports} />
-      <AppCard ports={ports} />
-      <AboutCard ports={ports} />
+      <h1 class="ion-heading">Ion</h1>
+      <Section title="Plugins">
+        <PluginsSection ports={ports} />
+      </Section>
+      <hr class="ion-divider" />
+      <Section title="App">
+        <AppSection ports={ports} />
+      </Section>
+      <hr class="ion-divider" />
+      <Section title="About">
+        <AboutSection ports={ports} />
+      </Section>
     </div>
   );
 }

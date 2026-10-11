@@ -1,21 +1,33 @@
 /**
  * Shadow-root stylesheet for the settings panel.
  *
- * Hard rules (enforced by styles.test.ts): every color comes from a Discord
- * CSS variable — never a literal — so Ion's panel follows the user's theme,
- * including themes that override Discord's variables. Document-level styles
- * do not pierce the shadow root, so this file carries the complete look.
+ * Every metric here mirrors Discord's own settings UI, measured from the live
+ * client (computed styles + stylesheet ground truth, 2026 visual refresh):
+ * the 696px content column, flat sections on the modal's own background, the
+ * 48x24 blurple switch, and the fixed-position select menu.
+ *
+ * Hard rules (enforced by panel.test.ts): colors come from Discord's design
+ * tokens — every hex is a var() fallback — except a small allowlist of
+ * literals Discord itself hardcodes inline (the switch's off-track, the menu
+ * shadow). Old-era tokens (--background-primary, --header-primary,
+ * --interactive-*) no longer exist in Discord and must not be used.
+ *
+ * Document-level styles do not pierce the shadow root, so this file carries
+ * the complete look; the host itself paints nothing, blending with whatever
+ * background the modal and theme provide.
  */
 export const PANEL_CSS = `
 :host {
   display: block;
-  height: 100%;
-  overflow-y: auto;
-  background: var(--background-primary, #313338);
-  font-family: var(--font-primary, Arial, sans-serif);
-  color: var(--text-normal, #dbdee1);
-  scrollbar-width: thin;
-  scrollbar-color: var(--background-modifier-accent, #4e5058) transparent;
+  box-sizing: border-box;
+  /* Discord's settings column: 696px of content plus 16px of padding per side. */
+  max-width: 728px;
+  margin: 64px auto;
+  padding: 0 16px;
+  color: var(--text-default, #d4d5d8);
+  font-family: var(--font-primary, "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif);
+  font-size: 16px;
+  line-height: 20px;
 }
 :host ::selection {
   background: var(--brand-500, #5865f2);
@@ -24,39 +36,41 @@ export const PANEL_CSS = `
 * {
   box-sizing: border-box;
 }
-.ion-page {
-  max-width: 740px;
-  margin: 0 auto;
-  padding: 60px 40px 80px;
-}
-.ion-title {
+
+/* Page and section headings: Discord's heading-xl — 24px, normal weight. */
+.ion-heading,
+.ion-section-title {
   margin: 0 0 20px;
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 24px;
-  color: var(--header-primary, #f2f3f5);
+  font-size: 24px;
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 30px;
+  color: var(--text-strong, #dcdcdf);
 }
-.ion-card {
-  background: var(--background-secondary, #2b2d31);
-  border-radius: 8px;
-  margin-bottom: 24px;
-  overflow: hidden;
+.ion-heading {
+  padding-top: 10px;
 }
-.ion-card-title {
-  margin: 0;
-  padding: 16px 20px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--header-secondary, #b5bac1);
+
+/* Sections are flat, matching Discord: no card background, no borders; the
+   padding + negative margins reproduce Discord's section container box. */
+.ion-section {
+  margin: 0 -16px;
+  padding: 10px 16px;
 }
+.ion-divider {
+  margin: 40px 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle, rgba(151, 151, 159, 0.2));
+}
+
+/* Rows: label stack on the left, control right-aligned, 20px apart. */
 .ion-row {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--background-modifier-accent, #3f4147);
+  align-items: flex-start;
+  gap: 20px;
+  padding: 16px 0;
+}
+.ion-row + .ion-row {
+  border-top: 1px solid var(--border-subtle, rgba(151, 151, 159, 0.2));
 }
 .ion-row-main {
   flex: 1;
@@ -64,84 +78,89 @@ export const PANEL_CSS = `
 }
 .ion-row-label {
   font-size: 16px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium, 500);
   line-height: 20px;
-  color: var(--header-primary, #f2f3f5);
+  color: var(--text-strong, #dcdcdf);
 }
 .ion-row-desc {
   margin-top: 4px;
-  font-size: 14px;
-  line-height: 18px;
-  color: var(--header-secondary, #b5bac1);
+  font-size: 16px;
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 20px;
+  color: var(--text-default, #d4d5d8);
 }
 .ion-row-error {
   margin-top: 4px;
-  font-size: 13px;
-  line-height: 17px;
-  color: var(--status-danger, #f23f43);
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--text-feedback-critical, #fa777c);
 }
-.ion-restart {
-  margin-left: 8px;
-  color: var(--text-muted, #949ba4);
-  font-size: 12px;
+.ion-empty {
+  padding: 16px 0;
+  font-size: 16px;
+  color: var(--text-subtle, #96979e);
 }
 .ion-state {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  font-weight: var(--font-weight-medium, 500);
 }
-.ion-state-started { color: var(--status-positive, #23a559); }
-.ion-state-failed { color: var(--status-danger, #f23f43); }
-.ion-state-stopped { color: var(--text-muted, #949ba4); }
+.ion-state-started { color: var(--status-positive, #3d9e60); }
+.ion-state-failed { color: var(--text-feedback-critical, #fa777c); }
+.ion-state-stopped,
 .ion-state-starting,
-.ion-state-stopping { color: var(--text-muted, #949ba4); }
+.ion-state-stopping { color: var(--text-subtle, #96979e); }
+.ion-restart {
+  color: var(--text-subtle, #96979e);
+}
 
-/* Toggle switch — Discord's pill proportions and interaction colors. */
+/* Switch: Discord's 48x24 pill — blurple when on, translucent black when off,
+   with a 16px white thumb sliding between 4px and 27px. The off-track and its
+   hover border are literals because Discord hardcodes them inline. */
 .ion-switch {
-  flex: none;
   position: relative;
-  width: 40px;
+  flex: none;
+  width: 48px;
   height: 24px;
   padding: 0;
-  border: none;
-  border-radius: 12px;
-  background: var(--interactive-muted, #80848e);
+  border: 1px solid var(--border-subtle, rgba(151, 151, 159, 0.2));
+  border-radius: var(--radius-lg, 16px);
+  background: rgba(0, 0, 0, 0.12);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .ion-switch:hover:not(:disabled) {
-  background: var(--interactive-normal, #b5bac1);
+  border-color: rgba(151, 151, 159, 0.4);
 }
 .ion-switch[aria-checked="true"] {
-  background: var(--interactive-active, #f2f3f5);
+  background: var(--brand-500, #5865f2);
 }
 .ion-switch[aria-checked="true"]:hover:not(:disabled) {
-  background: var(--interactive-active, #f2f3f5);
+  background: color-mix(in srgb, var(--brand-500, #5865f2) 80%, rgb(0 0 0));
 }
 .ion-switch:disabled {
   cursor: default;
   opacity: 0.6;
 }
 .ion-switch:focus-visible {
-  outline: 2px solid var(--focus, #00a8fc);
+  outline: 2px solid var(--border-focus, #6aa8f4);
   outline-offset: 2px;
 }
-.ion-switch-knob {
+.ion-switch-thumb {
   position: absolute;
-  top: 4px;
+  top: 3px;
   left: 4px;
   width: 16px;
   height: 16px;
   border-radius: 50%;
   background: var(--white-500, #ffffff);
-  transition: transform 0.15s ease;
+  transition: left 0.2s ease;
 }
-.ion-switch[aria-checked="true"] .ion-switch-knob {
-  transform: translateX(16px);
+.ion-switch[aria-checked="true"] .ion-switch-thumb {
+  left: 27px;
 }
 
-/* Select — button + popover list, styled from theme variables. */
+/* Select: borderless 38px trigger (value + chevron) opening a fixed-position
+   menu anchored to the trigger — fixed positioning is what keeps it from
+   being clipped by the settings scroller, exactly like Discord's dropdowns. */
 .ion-select-wrap {
   position: relative;
   flex: none;
@@ -150,93 +169,91 @@ export const PANEL_CSS = `
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 180px;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--background-modifier-accent, #3f4147);
-  border-radius: 4px;
-  background: var(--background-tertiary, #1e1f22);
-  color: var(--text-normal, #dbdee1);
+  height: 38px;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text-default, #d4d5d8);
   font: inherit;
-  font-size: 14px;
+  font-size: 16px;
+  line-height: 20px;
   cursor: pointer;
 }
 .ion-select:hover {
-  border-color: var(--interactive-normal, #b5bac1);
+  background: var(--background-mod-muted, rgba(151, 151, 159, 0.08));
 }
 .ion-select:focus-visible {
-  outline: 2px solid var(--focus, #00a8fc);
-  outline-offset: 1px;
+  outline: 2px solid var(--border-focus, #6aa8f4);
+  outline-offset: -2px;
 }
 .ion-select-label {
   flex: 1;
   text-align: left;
+  white-space: nowrap;
 }
 .ion-select-chevron {
   flex: none;
-  color: var(--text-muted, #949ba4);
+  display: flex;
+  color: var(--text-subtle, #96979e);
 }
 .ion-select-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 2;
-  min-width: 100%;
+  position: fixed;
+  z-index: 1000;
+  min-width: 200px;
+  max-width: 300px;
+  max-height: 240px;
   margin: 0;
-  padding: 6px;
+  padding: 4px;
+  overflow-y: auto;
   list-style: none;
-  border: 1px solid var(--background-modifier-accent, #3f4147);
-  border-radius: 4px;
-  background: var(--background-secondary, #2b2d31);
-  box-shadow: 0 8px 16px var(--shadow-high);
+  border: 1px solid var(--border-subtle, rgba(151, 151, 159, 0.2));
+  border-radius: var(--radius-sm, 8px);
+  background: var(--background-surface-higher, #121214);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
 }
 .ion-select-option {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  height: 40px;
+  padding: 0 8px;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 4px);
   background: transparent;
-  color: var(--text-normal, #dbdee1);
+  color: var(--text-default, #d4d5d8);
   font: inherit;
-  font-size: 14px;
+  font-size: 16px;
   text-align: left;
-  cursor: pointer;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.05s ease-in;
 }
-.ion-select-option:hover {
-  background: var(--background-modifier-hover, transparent);
-}
+.ion-select-option:hover,
 .ion-select-option:focus-visible {
-  outline: 2px solid var(--focus, #00a8fc);
-  outline-offset: -2px;
+  background: var(--background-mod-normal, rgba(151, 151, 159, 0.2));
+  outline: none;
 }
 .ion-select-option[aria-selected="true"] {
-  color: var(--brand-500, #5865f2);
+  background: var(--background-mod-normal, rgba(151, 151, 159, 0.2));
+  color: var(--text-strong, #dcdcdf);
 }
+
 .ion-link {
   padding: 0;
   border: none;
   background: none;
-  color: var(--text-link, #00a8fc);
+  color: var(--text-link, #2781e7);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   cursor: pointer;
 }
 .ion-link:hover {
   text-decoration: underline;
 }
 .ion-link:focus-visible {
-  outline: 2px solid var(--focus, #00a8fc);
+  outline: 2px solid var(--border-focus, #6aa8f4);
   outline-offset: 2px;
-}
-.ion-empty {
-  padding: 16px 20px;
-  font-size: 14px;
-  color: var(--header-secondary, #b5bac1);
-  border-top: 1px solid var(--background-modifier-accent, #3f4147);
 }
 `;

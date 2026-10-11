@@ -103,27 +103,64 @@ function pluginSwitch(shadow: ShadowRoot, name: string): HTMLElement | null {
 }
 
 describe("mountPanel", () => {
-  it("styles from Discord variables only", () => {
-    expect(PANEL_CSS).toContain("var(--background-primary");
-    expect(PANEL_CSS).toContain("var(--header-primary");
-    // Every hex literal must be a var() fallback, never a bare color.
-    const hexes = PANEL_CSS.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
-    const fallbacks = PANEL_CSS.match(/var\(\s*--[a-z0-9-]+\s*,\s*#[0-9a-fA-F]{3,8}/g) ?? [];
-    expect(hexes.length).toBe(fallbacks.length);
-    expect(hexes.length).toBeGreaterThan(0);
-    expect(PANEL_CSS).not.toMatch(/[^-(]\brgba?\(/);
-    expect(PANEL_CSS).not.toMatch(/hsla?\(/);
-    expect(PANEL_CSS).not.toContain("font-family: Arial"); // font must come from the theme
+  it("styles from Discord's design tokens, with only Discord's own literal colors", () => {
+    // The panel must ride the current visual-refresh tokens...
+    expect(PANEL_CSS).toContain("var(--text-strong");
+    expect(PANEL_CSS).toContain("var(--text-default");
+    expect(PANEL_CSS).toContain("var(--brand-500");
+    expect(PANEL_CSS).toContain("var(--background-surface-higher");
+    // ...and must never reference tokens Discord removed in the refresh.
+    for (const dead of [
+      "--background-primary",
+      "--background-secondary",
+      "--background-tertiary",
+      "--header-primary",
+      "--header-secondary",
+      "--interactive-normal",
+      "--interactive-active",
+      "--background-modifier-accent",
+      "--text-normal",
+    ]) {
+      expect(PANEL_CSS).not.toContain(dead);
+    }
+
+    // Strip var(--token, fallback) calls, then every remaining color literal
+    // must be one Discord itself hardcodes inline (switch off-track and hover
+    // border, dropdown shadow, color-mix hover base).
+    const stripped = PANEL_CSS.replace(/var\(\s*--[a-z0-9-]+[^)]*\)/g, "");
+    const literals = stripped.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/g) ?? [];
+    const allowed = new Set([
+      "rgba(0, 0, 0, 0.12)",
+      "rgba(151, 151, 159, 0.4)",
+      "rgba(0, 0, 0, 0.16)",
+      "rgb(0 0 0)",
+    ]);
+    expect(literals.length).toBeGreaterThan(0);
+    for (const literal of literals) {
+      expect(allowed.has(literal), `unexpected color literal: ${literal}`).toBe(true);
+    }
+    // The theme provides the font; a bare `font-family: Arial` rule would not.
+    expect(PANEL_CSS).not.toContain("font-family: Arial");
   });
 
   it("renders into a shadow root with the stylesheet, and unmounts cleanly", () => {
     const { shadow, unmount } = renderPanel();
     const style = shadow.querySelector("style");
     expect(style?.textContent).toBe(PANEL_CSS);
-    expect(shadow.querySelector(".ion-title")?.textContent).toBe("Ion");
+    expect(shadow.querySelector(".ion-heading")?.textContent).toBe("Ion");
     unmount();
-    expect(shadow.querySelector(".ion-title")).toBeNull();
+    expect(shadow.querySelector(".ion-heading")).toBeNull();
     expect(shadow.querySelector("style")).toBeNull();
+  });
+
+  it("lays out as flat Discord-style sections divided by rules", async () => {
+    const { shadow, unmount } = renderPanel();
+    await flush();
+    const titles = [...shadow.querySelectorAll(".ion-section-title")].map((h) => h.textContent);
+    expect(titles).toEqual(["Plugins", "App", "About"]);
+    expect(shadow.querySelectorAll(".ion-divider")).toHaveLength(2);
+    expect(shadow.querySelector(".ion-card")).toBeNull(); // no legacy cards
+    unmount();
   });
 });
 
@@ -243,6 +280,45 @@ describe("app settings card", () => {
     expect(shadow.querySelector(".ion-select-menu")).not.toBeNull();
 
     document.body.click();
+    await flush();
+    expect(shadow.querySelector(".ion-select-menu")).toBeNull();
+    unmount();
+  });
+
+  it("anchors the menu at a fixed viewport position below the trigger", async () => {
+    const { shadow, unmount } = renderPanel();
+    await flush();
+    const trigger = shadow.querySelector<HTMLButtonElement>('[aria-label="Display server"]');
+    trigger?.click();
+    await flush();
+
+    // Fixed positioning (from the stylesheet) is what keeps the menu clear of
+    // the scroller's clipping; left/top/minWidth are pinned at open time from
+    // the trigger's viewport rect.
+    expect(PANEL_CSS).toMatch(/\.ion-select-menu \{[^}]*position: fixed/);
+    const menu = shadow.querySelector<HTMLElement>(".ion-select-menu");
+    expect(menu?.style.left).toMatch(/px$/);
+    expect(menu?.style.top).toMatch(/px$/);
+    expect(menu?.style.minWidth).toMatch(/px$/);
+    unmount();
+  });
+
+  it("closes on Escape and moves between options with the arrow keys", async () => {
+    const { shadow, unmount } = renderPanel();
+    await flush();
+    const trigger = shadow.querySelector<HTMLButtonElement>('[aria-label="Display server"]');
+    trigger?.click();
+    await flush();
+
+    const menu = shadow.querySelector<HTMLElement>(".ion-select-menu");
+    if (!menu) throw new Error("menu should be open");
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await flush();
+    const options = [...menu.querySelectorAll<HTMLElement>(".ion-select-option")];
+    const root = menu.getRootNode() as ShadowRoot;
+    expect(root.activeElement).toBe(options[1]);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await flush();
     expect(shadow.querySelector(".ion-select-menu")).toBeNull();
     unmount();
