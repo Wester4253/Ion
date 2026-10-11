@@ -213,6 +213,23 @@ export class PatchRegistry {
   }
 
   /**
+   * Drop every active patch attributed to `plugin` (plugin disable/unload).
+   * Modules the patch already modified keep the change — source patches are
+   * one-way once a factory has evaluated; a plugin's `stop` owns runtime
+   * reversion. Returns how many patches were removed.
+   */
+  removeByPlugin(plugin: string): number {
+    let removed = 0;
+    for (let i = this.active.length - 1; i >= 0; i--) {
+      if (this.active[i]?.plugin === plugin) {
+        this.active.splice(i, 1);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  /**
    * Apply every active patch that matches `source`.
    * Never throws: replace-function exceptions and rebuild failures become
    * notices; the returned `code` is always usable.

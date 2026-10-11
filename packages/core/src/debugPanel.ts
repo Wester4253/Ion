@@ -12,12 +12,13 @@
  * to a floating button above the user panel area after a deadline.
  */
 
-import type { IonWebpackStatus } from "./platform/shell";
+import type { IonPluginStatus, IonWebpackStatus } from "./platform/shell";
 
 const HOST_TAG = "ion-debug-host";
 
-/** Latest webpack status and the mounted root, so polls can update the panel. */
+/** Latest statuses and the mounted root, so polls can update the panel. */
 let latestWebpack: IonWebpackStatus | undefined;
+let latestPlugins: IonPluginStatus | undefined;
 let panelRoot: ShadowRoot | undefined;
 const GEAR_SELECTOR = '[aria-label="User Settings"]';
 const DOCK_DEADLINE_MS = 20_000;
@@ -126,6 +127,7 @@ const SHADOW_HTML = `
   <div class="row"><span>Injection</span><b data-field="injection">—</b></div>
   <div class="row"><span>Shell</span><b data-field="shell">—</b></div>
   <div class="row"><span>Webpack</span><b data-field="webpack">starting…</b></div>
+  <div class="row"><span>Plugins</span><b data-field="plugins">loading…</b></div>
 </div>
 `;
 
@@ -151,6 +153,17 @@ function formatWebpack(status: IonWebpackStatus): string {
 export function updateWebpackStatus(status: IonWebpackStatus): void {
   latestWebpack = status;
   if (panelRoot) setField(panelRoot, "webpack", formatWebpack(status));
+}
+
+function formatPlugins(status: IonPluginStatus): string {
+  const failed = status.failed > 0 ? ` · ${String(status.failed)} failed` : "";
+  return `${String(status.started)}/${String(status.registered)} started${failed}`;
+}
+
+/** Push a fresh plugin-host status into the panel (no-op before it mounts). */
+export function updatePluginStatus(status: IonPluginStatus): void {
+  latestPlugins = status;
+  if (panelRoot) setField(panelRoot, "plugins", formatPlugins(status));
 }
 
 function setPanelOpen(root: ShadowRoot, open: boolean): void {
@@ -198,6 +211,7 @@ function boot(): void {
   root.innerHTML = SHADOW_HTML;
   panelRoot = root;
   if (latestWebpack) setField(root, "webpack", formatWebpack(latestWebpack));
+  if (latestPlugins) setField(root, "plugins", formatPlugins(latestPlugins));
 
   const trigger = root.querySelector<HTMLButtonElement>(".trigger");
   const panel = root.querySelector<HTMLElement>(".panel");

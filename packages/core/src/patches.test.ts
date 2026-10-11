@@ -322,4 +322,29 @@ describe("PatchRegistry", () => {
     expect(outcome.code).toContain("value = 3");
     expect(outcome.patchedBy).toEqual(["PluginA", "PluginB"]);
   });
+
+  it("removes only the active patches attributed to a plugin", () => {
+    const registry = registryWith(
+      {
+        plugin: "PluginA",
+        find: "value = 1",
+        replacement: { match: "value = 1", replace: "value = 2" },
+      },
+      {
+        plugin: "PluginB",
+        find: "value = 1",
+        replacement: { match: "value = 1", replace: "value = 3" },
+      },
+      {
+        plugin: "PluginA",
+        find: "exports.value",
+        replacement: { match: "exports.value", replace: "exports.value" },
+      },
+    );
+
+    expect(registry.removeByPlugin("PluginA")).toBe(2);
+    expect(registry.size).toBe(1);
+    expect(registry.removeByPlugin("PluginA")).toBe(0);
+    expect(registry.applyTo(SOURCE).patchedBy).toEqual(["PluginB"]);
+  });
 });

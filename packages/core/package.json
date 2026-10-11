@@ -22,5 +22,8 @@
     "build": "node ../../scripts/bundle.mjs",
     "dev": "node ../../scripts/bundle.mjs --watch",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ion/plugin-diagnostics": "workspace:*"
   }
 }

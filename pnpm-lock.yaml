@@ -56,7 +56,11 @@ importers:
 
   packages/compat-vencord: {}
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@ion/plugin-diagnostics':
+        specifier: workspace:*
+        version: link:../../plugins/diagnostics
 
   packages/shell-desktop:
     dependencies:
@@ -69,6 +73,12 @@ importers:
         version: 44.7.0
 
   packages/ui: {}
+
+  plugins/diagnostics:
+    dependencies:
+      '@ion/core':
+        specifier: workspace:*
+        version: link:../../packages/core
 
 packages:
 

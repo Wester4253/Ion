@@ -50,6 +50,12 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
       debugPanelWebpack: await probe(
         "(() => { const host = document.querySelector('ion-debug-host'); const field = host?.shadowRoot?.querySelector('[data-field=\"webpack\"]'); return field ? field.textContent : null; })()",
       ),
+      pluginsStatus: await probe(
+        "window.__ION__ && window.__ION__.plugins ? { status: window.__ION__.plugins.status(), ids: window.__ION__.plugins.list().map(p => `${p.id}:${p.state}`) } : null",
+      ),
+      debugPanelPlugins: await probe(
+        "(() => { const host = document.querySelector('ion-debug-host'); const field = host?.shadowRoot?.querySelector('[data-field=\"plugins\"]'); return field ? field.textContent : null; })()",
+      ),
     };
     const image = await contents.capturePage().catch(() => null);
     if (image && !image.isEmpty()) {

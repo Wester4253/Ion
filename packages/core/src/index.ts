@@ -10,13 +10,23 @@
  * the health poll.
  */
 
-import { mountDebugPanel, updateWebpackStatus } from "./debugPanel";
-import type { IonGlobal, IonWebpackStatus } from "./platform/shell";
-import { initWebpack, probeHealth } from "./webpack";
+import { registerBundledPlugins } from "./bundledPlugins";
+import { mountDebugPanel, updatePluginStatus, updateWebpackStatus } from "./debugPanel";
+import { createPluginHost } from "./plugins";
+import type { IonGlobal, IonWebpackStatus, ShellFileApi } from "./platform/shell";
+import { createSettingsStore } from "./settings";
+import { getPatchRegistry, initWebpack, probeHealth } from "./webpack";
 
 export type {
   FileEncoding,
   IonGlobal,
+  IonPlugin,
+  IonPluginContext,
+  IonPluginInfo,
+  IonPluginPatch,
+  IonPluginState,
+  IonPluginStatus,
+  IonPluginsApi,
   IonWebpackStatus,
   ShellFileApi,
   ShellHost,
@@ -24,6 +34,9 @@ export type {
   ShellRequire,
   ShellSettingsApi,
 } from "./platform/shell";
+
+export { createPluginHost, type PluginHost } from "./plugins";
+export { createSettingsStore, type PluginSettings, type SettingsStore } from "./settings";
 
 export {
   find,
@@ -37,6 +50,7 @@ export {
   findByPropsLazy,
   findStore,
   findStoreLazy,
+  getPatchRegistry,
   initWebpack,
   probeHealth,
   registerPatches,
@@ -48,6 +62,28 @@ export {
 const HEALTH_POLL_LIMIT = 30;
 const HEALTH_POLL_INTERVAL_MS = 1_000;
 
+/**
+ * Used when the shell bridge is missing: reads fail closed, writes are
+ * dropped with a logged error — plugins fall back to their defaults.
+ */
+const UNAVAILABLE_FILES: ShellFileApi = {
+  readFile() {
+    return Promise.reject(new Error("shell bridge unavailable"));
+  },
+  writeFile() {
+    return Promise.reject(new Error("shell bridge unavailable"));
+  },
+  readdir() {
+    return Promise.reject(new Error("shell bridge unavailable"));
+  },
+  mkdir() {
+    return Promise.reject(new Error("shell bridge unavailable"));
+  },
+  exists() {
+    return Promise.resolve(false);
+  },
+};
+
 const state: IonGlobal = {
   version: window.ionShell?.appVersion ?? "unknown",
   startedAt: performance.now(),
@@ -55,9 +91,32 @@ const state: IonGlobal = {
 
 window.__ION__ = state;
 
+const settings = createSettingsStore(window.ionShell?.files ?? UNAVAILABLE_FILES);
+const host = createPluginHost({ registry: getPatchRegistry(), settings });
+state.plugins = host;
+
 initWebpack();
 mountDebugPanel();
 startHealthPoll();
+bootPlugins();
+
+/**
+ * Load settings, register the bundled plugins, and start everything
+ * enabled. The file bridge is synchronous IPC behind a promise, so this
+ * resolves within microtasks — before Discord's first script runs, which
+ * means plugin patches register before any module evaluates.
+ */
+function bootPlugins(): void {
+  registerBundledPlugins(host);
+  void (async () => {
+    await settings.load();
+    await host.boot();
+    updatePluginStatus(host.status());
+    host.subscribe(() => {
+      updatePluginStatus(host.status());
+    });
+  })();
+}
 
 function startHealthPoll(): void {
   let ticks = 0;

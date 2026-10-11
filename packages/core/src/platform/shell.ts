@@ -9,6 +9,10 @@
  * `window.ionShell` by the sandboxed preload.
  */
 
+import type { Logger } from "../logging";
+import type { Patch } from "../patches";
+import type { PluginSettings } from "../settings";
+
 export type ShellKind = "desktop" | "android";
 
 export type FileEncoding = "utf8" | "base64";
@@ -74,11 +78,80 @@ export interface IonWebpackStatus {
   readonly store: boolean;
 }
 
+/**
+ * A patch a plugin contributes. The host injects the `plugin` attribution
+ * string before handing the patch to the engine.
+ */
+export type IonPluginPatch = Omit<Patch, "plugin">;
+
+/** What a plugin may use from its host while running. */
+export interface IonPluginContext {
+  /** Settings scoped under `plugin.<id>.*`. */
+  readonly settings: PluginSettings;
+  /** A logger prefixed with the plugin's name. */
+  readonly log: Logger;
+}
+
+/**
+ * The native Ion plugin manifest. The shape deliberately mirrors Vencord's
+ * plugin definition so ports are mechanical; see docs/plugin-authoring.md.
+ */
+export interface IonPlugin {
+  /** Stable unique id; also the settings namespace. */
+  readonly id: string;
+  /** Display name; must be unique (patch notices are attributed by it). */
+  readonly name: string;
+  readonly description: string;
+  readonly authors?: readonly { readonly name: string; readonly id?: string }[];
+  readonly version?: string;
+  /** Enabled unless the user disabled it; defaults to true. */
+  readonly defaultEnabled?: boolean;
+  /**
+   * Source patches, registered with the engine before Discord evaluates its
+   * modules. Already-evaluated modules are never affected by late patches.
+   */
+  readonly patches?: readonly IonPluginPatch[];
+  readonly start?: (context: IonPluginContext) => void | Promise<void>;
+  readonly stop?: (context: IonPluginContext) => void | Promise<void>;
+}
+
+export type IonPluginState = "stopped" | "starting" | "started" | "stopping" | "failed";
+
+/** A plugin as shown in the UI: identity plus live lifecycle state. */
+export interface IonPluginInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly authors: readonly string[];
+  readonly version?: string | undefined;
+  readonly enabled: boolean;
+  readonly state: IonPluginState;
+  readonly error?: string | undefined;
+}
+
+export interface IonPluginStatus {
+  readonly registered: number;
+  readonly started: number;
+  readonly failed: number;
+}
+
+/** Registration and inspection surface, exposed as `window.__ION__.plugins`. */
+export interface IonPluginsApi {
+  register(plugin: IonPlugin): void;
+  list(): readonly IonPluginInfo[];
+  /** Toggle at runtime: starts/stops the plugin and (un)registers patches. */
+  setEnabled(id: string, enabled: boolean): Promise<void>;
+  status(): IonPluginStatus;
+  /** Fired whenever any plugin's state or enabled flag changes. */
+  subscribe(listener: () => void): () => void;
+}
+
 /** Injected by the core bundle as proof that it ran in the main world. */
 export interface IonGlobal {
   readonly version: string;
   readonly startedAt: number;
   webpack?: IonWebpackStatus;
+  plugins?: IonPluginsApi;
 }
 
 declare global {

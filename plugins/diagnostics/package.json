@@ -1,0 +1,17 @@
+{
+  "name": "@ion/plugin-diagnostics",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Built-in Ion plugin: copy a diagnostics report to the clipboard.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ion/core": "workspace:*"
+  }
+}

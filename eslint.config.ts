@@ -59,7 +59,10 @@ export default defineConfig(
     files: ["packages/core/**/*.ts"],
     rules: {
       "no-restricted-imports": platformNeutralImports([
-        { group: ["@ion/*"], message: "@ion/core depends on nothing else in the monorepo." },
+        {
+          group: ["@ion/!(plugin-*)"],
+          message: "@ion/core only depends on built-in @ion/plugin-* packages.",
+        },
       ]),
     },
   },

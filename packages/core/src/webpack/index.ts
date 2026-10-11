@@ -45,6 +45,11 @@ export function registerPatches(...patches: readonly Patch[]): void {
   registry.add(...patches);
 }
 
+/** The shared patch registry (the plugin host removes from it on disable). */
+export function getPatchRegistry(): PatchRegistry {
+  return registry;
+}
+
 /**
  * Install the webpack chunk hook on `scope` (idempotent).
  * Called once by the core entry point, before any Discord script.
