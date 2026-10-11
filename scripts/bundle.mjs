@@ -17,6 +17,9 @@ const options = bundles.map((bundle) => ({
   platform: bundle.platform ?? "browser",
   format: bundle.format ?? "esm",
   external: bundle.external ?? [],
+  // JSX support for packages/ui; plain-TS bundles never see these.
+  ...(bundle.jsx === undefined ? {} : { jsx: bundle.jsx }),
+  ...(bundle.jsxImportSource === undefined ? {} : { jsxImportSource: bundle.jsxImportSource }),
   logLevel: "warning",
 }));
 

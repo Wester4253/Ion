@@ -27,6 +27,7 @@ export type {
   IonPluginState,
   IonPluginStatus,
   IonPluginsApi,
+  IonUiApi,
   IonWebpackStatus,
   ShellFileApi,
   ShellHost,

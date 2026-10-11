@@ -146,12 +146,18 @@ export interface IonPluginsApi {
   subscribe(listener: () => void): () => void;
 }
 
+/** UI readiness, exposed once the settings integration has initialized. */
+export interface IonUiApi {
+  readonly ready: boolean;
+}
+
 /** Injected by the core bundle as proof that it ran in the main world. */
 export interface IonGlobal {
   readonly version: string;
   readonly startedAt: number;
   webpack?: IonWebpackStatus;
   plugins?: IonPluginsApi;
+  ui?: IonUiApi;
 }
 
 declare global {

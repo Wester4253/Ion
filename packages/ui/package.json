@@ -8,18 +8,25 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "build": "node ../../scripts/bundle.mjs",
+    "dev": "node ../../scripts/bundle.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ion/core": "workspace:*",
+    "preact": "^11.0.1"
+  },
   "ion": {
     "bundles": [
       {
         "entry": "src/index.ts",
         "outfile": "dist/index.js",
-        "platform": "browser"
+        "platform": "browser",
+        "format": "iife",
+        "jsx": "automatic",
+        "jsxImportSource": "preact"
       }
     ]
-  },
-  "scripts": {
-    "build": "node ../../scripts/bundle.mjs",
-    "dev": "node ../../scripts/bundle.mjs --watch",
-    "typecheck": "tsc -p tsconfig.json"
   }
 }

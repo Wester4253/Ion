@@ -35,7 +35,7 @@ export default defineConfig(
     languageOptions: { globals: globals.node },
   },
   {
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,tsx}"],
     extends: [tseslint.configs.strictTypeChecked, tseslint.configs.stylisticTypeChecked],
     languageOptions: {
       parserOptions: {
@@ -68,7 +68,7 @@ export default defineConfig(
   },
   {
     files: [
-      "packages/ui/**/*.ts",
+      "packages/ui/**/*.{ts,tsx}",
       "packages/compat-vencord/**/*.ts",
       "packages/compat-bd/**/*.ts",
       "packages/compat-shelter/**/*.ts",
