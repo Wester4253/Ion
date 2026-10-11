@@ -20,7 +20,16 @@ const HOST_TAG = "ion-debug-host";
 let latestWebpack: IonWebpackStatus | undefined;
 let latestPlugins: IonPluginStatus | undefined;
 let panelRoot: ShadowRoot | undefined;
-const GEAR_SELECTOR = '[aria-label="User Settings"]';
+
+/**
+ * The gear button is the last (right-most) button of the user panel's button
+ * row — structural, so it survives locales; the English aria-label is only a
+ * fallback for when the structure itself changes.
+ */
+const GEAR_SELECTORS = [
+  "[class*=panels] [class*=buttons] > button:last-of-type",
+  '[aria-label="User Settings"]',
+];
 const DOCK_DEADLINE_MS = 20_000;
 
 const BOLT_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
@@ -174,12 +183,16 @@ function setPanelOpen(root: ShadowRoot, open: boolean): void {
 /** Attach to the user panel next to the gear, or fall back to floating. */
 function dock(host: HTMLElement): void {
   const attempt = (): boolean => {
-    const gear = document.querySelector(GEAR_SELECTOR);
-    const parent = gear?.parentElement;
-    if (!gear || !parent) return false;
-    parent.insertBefore(host, gear);
-    host.dataset["mode"] = "docked";
-    return true;
+    for (const selector of GEAR_SELECTORS) {
+      const gear = document.querySelector(selector);
+      const parent = gear?.parentElement;
+      if (gear && parent) {
+        parent.insertBefore(host, gear);
+        host.dataset["mode"] = "docked";
+        return true;
+      }
+    }
+    return false;
   };
 
   if (attempt()) return;
