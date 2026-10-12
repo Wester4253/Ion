@@ -11,7 +11,12 @@ import type { BrowserWindow } from "electron";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const SETTLE_DELAY_MS = 25_000;
+/** Delay after the first did-finish-load before the report is collected. */
+const DEFAULT_SETTLE_MS = 9_000;
+/** Extra time above the settle delay for the fallback finish timer. */
+const FALLBACK_MARGIN_MS = 16_000;
+/** Console warnings kept in the report (deduplicated; further ones dropped). */
+const MAX_WARNINGS = 100;
 
 /**
  * Console errors that occur by design in a healthy run, each with the
@@ -35,10 +40,15 @@ export function parseSmokeArg(argv: readonly string[]): string | null {
   return value.startsWith("=") && value.length > 1 ? value.slice(1) : ".";
 }
 
-export function runSmoke(outputDir: string, win: BrowserWindow): void {
+export function runSmoke(
+  outputDir: string,
+  win: BrowserWindow,
+  options: { readonly settleMs?: number | undefined } = {},
+): void {
   mkdirSync(outputDir, { recursive: true });
 
-  const timer = setTimeout(() => void finish("timeout"), SETTLE_DELAY_MS);
+  const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
+  const timer = setTimeout(() => void finish("timeout"), settleMs + FALLBACK_MARGIN_MS);
 
   const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -47,7 +57,12 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
   // separately — this list stays tiny and every entry carries its reason.
   const rendererErrors: string[] = [];
   const expectedErrors = new Map<string, number>();
+  const warnings = new Set<string>();
   win.webContents.on("console-message", (details) => {
+    if (details.level === "warning") {
+      if (warnings.size < MAX_WARNINGS) warnings.add(details.message);
+      return;
+    }
     if (details.level !== "error") return;
     const expected = EXPECTED_ERRORS.find((entry) => entry.match.test(details.message));
     if (expected) {
@@ -121,7 +136,7 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
         "(() => { const host = document.querySelector('ion-debug-host'); const field = host?.shadowRoot?.querySelector('[data-field=\"webpack\"]'); return field ? field.textContent : null; })()",
       ),
       pluginsStatus: await probe(
-        "window.__ION__ && window.__ION__.plugins ? { status: window.__ION__.plugins.status(), ids: window.__ION__.plugins.list().map(p => `${p.id}:${p.state}`) } : null",
+        "window.__ION__ && window.__ION__.plugins ? { status: window.__ION__.plugins.status(), ids: window.__ION__.plugins.list().map(p => `${p.id}:${p.state}`), failures: window.__ION__.plugins.list().filter(p => p.error).map(p => ({ id: p.id, error: p.error })) } : null",
       ),
       debugPanelPlugins: await probe(
         "(() => { const host = document.querySelector('ion-debug-host'); const field = host?.shadowRoot?.querySelector('[data-field=\"plugins\"]'); return field ? field.textContent : null; })()",
@@ -163,6 +178,8 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
     report["ionPanelTimeline"] = ionPanelTimeline;
     report["rendererErrors"] = rendererErrors.slice(0, 20);
     report["expectedErrors"] = Object.fromEntries(expectedErrors);
+    report["warnings"] = [...warnings];
+    report["patchStats"] = await probe("window.__ION__?.patches?.stats?.() ?? null");
     const image = await contents.capturePage().catch(() => null);
     if (image && !image.isEmpty()) {
       writeFileSync(join(outputDir, "screenshot.png"), image.toPNG());
@@ -199,7 +216,7 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
 
   win.webContents.once("did-finish-load", () => {
     // The SPA needs a moment after load before the login UI is painted.
-    setTimeout(() => void finish("did-finish-load"), 9000);
+    setTimeout(() => void finish("did-finish-load"), settleMs);
   });
   win.webContents.on("render-process-gone", (_event, details) => {
     void finish(`render-process-gone: ${details.reason}`);

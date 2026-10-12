@@ -10,6 +10,7 @@ import type { BrowserWindow } from "electron";
 
 import { registerCspHandler } from "./csp";
 import { buildChromiumSwitchPlan } from "./flags";
+import { parseSeedVencordSettingsArg, parseSmokeSettleArg } from "./harnessFlags";
 import { registerIpcHandlers } from "./ipc";
 import { registerPermissionHandlers } from "./permissions";
 import { registerScreenShareHandler } from "./screenshare";
@@ -51,7 +52,10 @@ if (!hasLock) {
     // Grants the vencord.dev hosts the bundled plugins call; see csp.ts.
     registerCspHandler(session.defaultSession);
     // Before the window: the preload synchronously fetches the core bundle.
-    registerIpcHandlers({ settings });
+    registerIpcHandlers({
+      settings,
+      harnessSeed: parseSeedVencordSettingsArg(process.argv),
+    });
 
     const smokeDir = parseSmokeArg(process.argv);
     mainWin = createMainWindow({
@@ -63,7 +67,11 @@ if (!hasLock) {
       hidden: smokeDir !== null,
     });
 
-    if (smokeDir) runSmoke(smokeDir, mainWin);
+    if (smokeDir) {
+      runSmoke(smokeDir, mainWin, {
+        settleMs: parseSmokeSettleArg(process.argv) ?? undefined,
+      });
+    }
 
     mainWin.on("closed", () => {
       mainWin = null;

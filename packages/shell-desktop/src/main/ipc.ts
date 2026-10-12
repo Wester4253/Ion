@@ -61,6 +61,8 @@ function senderIsTrusted(event: { senderFrame: { url: string } | null }): boolea
 
 interface IpcContext {
   readonly settings: ShellSettingsStore;
+  /** Vencord settings JSON to pre-seed, or null outside harness runs. */
+  readonly harnessSeed: string | null;
 }
 
 export function registerIpcHandlers(context: IpcContext): void {
@@ -100,6 +102,12 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.on(IPC.coreBundle, (event) => {
     event.returnValue = senderIsTrusted(event) ? coreSource : "";
+  });
+
+  // Harness-only: the seed lets a compat run pre-enable foreign plugins
+  // before the compat bundle evaluates its settings store at injection.
+  ipcMain.on(IPC.harnessSeed, (event) => {
+    event.returnValue = senderIsTrusted(event) ? context.harnessSeed : null;
   });
 
   ipcMain.on(IPC.shellInfo, (event) => {

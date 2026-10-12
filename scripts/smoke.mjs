@@ -76,6 +76,10 @@ async function main() {
 
   const child = spawn(wrapper, wrapperArgs, {
     stdio: ["ignore", "inherit", "inherit"],
+    // Electron's dev-mode page warnings (Discord's CSP allows unsafe-eval) are
+    // noise in the report; real renderer errors still surface through the
+    // console-message hook.
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: "true" },
   });
 
   let timedOut = false;

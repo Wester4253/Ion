@@ -9,6 +9,8 @@
 export const IPC = {
   /** sendSync: source of the Ion core bundle for main-world injection. */
   coreBundle: "ion:core-bundle",
+  /** sendSync: harness-only Vencord settings seed (null outside harness runs). */
+  harnessSeed: "ion:harness-seed",
   /** sendSync: static shell facts (kind, versions). */
   shellInfo: "ion:shell-info",
   /** invoke: hand a URL to the system handler. */

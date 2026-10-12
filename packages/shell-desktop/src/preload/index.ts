@@ -103,6 +103,16 @@ const host: ShellHost = {
 contextBridge.exposeInMainWorld("ionShell", host);
 
 // Inject the core bundle into the main world before Discord's first script.
+// The harness seed must land first: the compat bundle's Vencord settings
+// store reads this key synchronously when it evaluates during injection.
+const harnessSeed = ipcRenderer.sendSync(IPC.harnessSeed) as string | null;
+if (harnessSeed !== null) {
+  try {
+    window.localStorage.setItem("ion.vencord.settings", harnessSeed);
+  } catch (error) {
+    console.error("[ion] harness settings seed failed:", error);
+  }
+}
 const coreSource = ipcRenderer.sendSync(IPC.coreBundle) as string | null;
 if (typeof coreSource === "string" && coreSource.length > 0) {
   void webFrame.executeJavaScript(coreSource).catch((error: unknown) => {
