@@ -57,6 +57,31 @@ export interface PatchNotice {
   readonly message: string;
 }
 
+/**
+ * Per-plugin patch telemetry, cumulative within the current registration
+ * generation (disable/enable resets `registered`/`active`, keeps
+ * `applied`/`notices` so a history of what already ran survives).
+ */
+export interface PluginPatchStats {
+  /** Patches registered (predicate-dropped ones are not counted). */
+  readonly registered: number;
+  /** Module matches where a replacement changed the code. */
+  readonly applied: number;
+  /** Patches still waiting for a matching module. */
+  readonly active: number;
+  /** Engine notices attributed to the plugin (capped, oldest dropped). */
+  readonly notices: readonly PatchNotice[];
+}
+
+/** Read-only view of the patch telemetry, exposed for the harness and UI. */
+export interface PatchStatsApi {
+  /** Keyed by the plugin name patches are attributed to. */
+  stats(): Record<string, PluginPatchStats>;
+}
+
+/** Notices kept per plugin before the oldest are dropped. */
+const MAX_NOTICES_PER_PLUGIN = 50;
+
 export type RebuildResult =
   { readonly ok: true; readonly factory: unknown } | { readonly ok: false; readonly error: string };
 
@@ -188,9 +213,16 @@ function canonicalizePatch(patch: Patch): CanonicalPatch {
  * Holds the active patch list. Patches whose predicate returns false are
  * dropped at registration; patches consumed by a module (those without
  * `all`) are removed as they apply — the same lifecycle as upstream.
+ *
+ * The registry also keeps counters and notices per plugin: the compat
+ * harness verifies "patch applied / target reached / why not" from these,
+ * which the log lines alone cannot answer.
  */
 export class PatchRegistry {
   private readonly active: CanonicalPatch[];
+  private readonly registered = new Map<string, number>();
+  private readonly appliedCount = new Map<string, number>();
+  private readonly noticesByPlugin = new Map<string, PatchNotice[]>();
 
   constructor(patches: Iterable<Patch> = []) {
     this.active = [];
@@ -209,6 +241,7 @@ export class PatchRegistry {
       // the plugin loader; a false predicate silently disables the patch.
       if (patch.predicate && !patch.predicate()) continue;
       this.active.push(canonicalizePatch(patch));
+      this.registered.set(patch.plugin, (this.registered.get(patch.plugin) ?? 0) + 1);
     }
   }
 
@@ -226,7 +259,43 @@ export class PatchRegistry {
         removed += 1;
       }
     }
+    // Every (re)registration starts a fresh generation for this plugin so a
+    // disable/enable cycle does not inflate `registered`; `applied` and
+    // `notices` stay cumulative on purpose. Called before each start, this
+    // also clears the count of a plugin whose patches were all consumed.
+    this.registered.delete(plugin);
     return removed;
+  }
+
+  /**
+   * Cumulative per-plugin telemetry for the compat harness and debug UI:
+   * patches registered (predicate-drops excluded), patches consumed by a
+   * module, patches still waiting for their target, and every notice the
+   * engine emitted for the plugin. Counters survive disable/enable cycles.
+   */
+  stats(): Record<string, PluginPatchStats> {
+    const activeByPlugin = new Map<string, number>();
+    for (const patch of this.active) {
+      activeByPlugin.set(patch.plugin, (activeByPlugin.get(patch.plugin) ?? 0) + 1);
+    }
+    // Union of every plugin seen by the registry: a plugin that was just
+    // disabled (registered reset) still reports its applied history.
+    const plugins = new Set<string>([
+      ...this.registered.keys(),
+      ...this.appliedCount.keys(),
+      ...this.noticesByPlugin.keys(),
+      ...activeByPlugin.keys(),
+    ]);
+    const result: Record<string, PluginPatchStats> = {};
+    for (const plugin of plugins) {
+      result[plugin] = {
+        registered: this.registered.get(plugin) ?? 0,
+        applied: this.appliedCount.get(plugin) ?? 0,
+        active: activeByPlugin.get(plugin) ?? 0,
+        notices: this.noticesByPlugin.get(plugin) ?? [],
+      };
+    }
+    return result;
   }
 
   /**
@@ -254,6 +323,9 @@ export class PatchRegistry {
 
       if (!matchesFind(source, patch.find)) continue;
 
+      // A patch is "applied" once a replacement changed the code and
+      // survived (no group rollback) — counted once per module match.
+      let fired = false;
       const codeBeforePatch = code;
       const factoryBeforePatch = factory;
       const patchedByBeforePatch = new Set(patchedBy);
@@ -316,6 +388,7 @@ export class PatchRegistry {
 
           code = next;
           patchedBy.add(patch.plugin);
+          fired = true;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           notices.push({
@@ -341,9 +414,26 @@ export class PatchRegistry {
         code = codeBeforePatch;
         factory = factoryBeforePatch;
         patchedBy = patchedByBeforePatch;
+        fired = false;
+      }
+
+      if (fired) {
+        this.appliedCount.set(patch.plugin, (this.appliedCount.get(patch.plugin) ?? 0) + 1);
       }
 
       if (!patch.all) this.active.splice(i--, 1);
+    }
+
+    // Notices from this pass, attributed per plugin (capped per plugin —
+    // the harness reads them, the cap only bounds memory).
+    for (const notice of notices) {
+      const list = this.noticesByPlugin.get(notice.plugin);
+      if (!list) this.noticesByPlugin.set(notice.plugin, [notice]);
+      else {
+        list.push(notice);
+        if (list.length > MAX_NOTICES_PER_PLUGIN)
+          list.splice(0, list.length - MAX_NOTICES_PER_PLUGIN);
+      }
     }
 
     return { code, factory, patchedBy: [...patchedBy], notices };

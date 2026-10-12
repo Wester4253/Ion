@@ -37,6 +37,7 @@ export type {
 } from "./platform/shell";
 
 export { createPluginHost, type PluginHost } from "./plugins";
+export type { Patch, PatchNotice, PatchStatsApi, PluginPatchStats } from "./patches";
 export { createSettingsStore, type PluginSettings, type SettingsStore } from "./settings";
 
 export {
@@ -95,6 +96,7 @@ window.__ION__ = state;
 const settings = createSettingsStore(window.ionShell?.files ?? UNAVAILABLE_FILES);
 const host = createPluginHost({ registry: getPatchRegistry(), settings });
 state.plugins = host;
+state.patches = { stats: () => getPatchRegistry().stats() };
 
 initWebpack();
 mountDebugPanel();

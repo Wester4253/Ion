@@ -347,4 +347,71 @@ describe("PatchRegistry", () => {
     expect(registry.removeByPlugin("PluginA")).toBe(0);
     expect(registry.applyTo(SOURCE).patchedBy).toEqual(["PluginB"]);
   });
+
+  it("counts registered, applied, and active patches per plugin", () => {
+    const registry = registryWith(
+      {
+        plugin: "PluginA",
+        find: "value = 1",
+        replacement: { match: "value = 1", replace: "value = 2" },
+      },
+      {
+        plugin: "PluginA",
+        find: "no such module",
+        replacement: { match: "x", replace: "y" },
+      },
+    );
+
+    let stats = registry.stats();
+    expect(stats["PluginA"]).toMatchObject({ registered: 2, applied: 0, active: 2 });
+
+    registry.applyTo(SOURCE);
+    stats = registry.stats();
+    // One patch matched and changed code; the other never found its target.
+    expect(stats["PluginA"]).toMatchObject({ registered: 2, applied: 1, active: 1 });
+  });
+
+  it("records notices against the plugin they belong to", () => {
+    const registry = registryWith({
+      plugin: "PluginA",
+      find: "value = 1",
+      replacement: { match: "value = 999", replace: "value = 2" },
+    });
+
+    registry.applyTo(SOURCE);
+    const stats = registry.stats();
+    expect(stats["PluginA"]?.applied).toBe(0);
+    expect(stats["PluginA"]?.notices).toHaveLength(1);
+    expect(stats["PluginA"]?.notices[0]?.message).toContain("had no effect");
+  });
+
+  it("resets the registered generation on disable but keeps applied history", () => {
+    const registry = registryWith({
+      plugin: "PluginA",
+      find: "value = 1",
+      replacement: { match: "value = 1", replace: "value = 2" },
+    });
+    registry.applyTo(SOURCE);
+    expect(registry.stats()["PluginA"]).toMatchObject({ registered: 1, applied: 1, active: 0 });
+
+    registry.removeByPlugin("PluginA");
+    expect(registry.stats()["PluginA"]).toMatchObject({ registered: 0, applied: 1, active: 0 });
+  });
+
+  it("counts a group rollback as not applied", () => {
+    const registry = registryWith({
+      plugin: "PluginA",
+      find: "value = 1",
+      replacement: [
+        { match: "value = 1", replace: "value = 2" },
+        { match: "no such text", replace: "x" },
+      ],
+      group: true,
+    });
+
+    registry.applyTo(SOURCE);
+    const stats = registry.stats();
+    expect(stats["PluginA"]).toMatchObject({ applied: 0, active: 0 });
+    expect(stats["PluginA"]?.notices.some((n) => n.message.includes("undid group"))).toBe(true);
+  });
 });

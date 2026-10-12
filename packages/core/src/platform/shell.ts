@@ -10,7 +10,7 @@
  */
 
 import type { Logger } from "../logging";
-import type { Patch } from "../patches";
+import type { Patch, PatchStatsApi } from "../patches";
 import type { PluginSettings } from "../settings";
 
 export type ShellKind = "desktop" | "android";
@@ -157,6 +157,8 @@ export interface IonGlobal {
   readonly startedAt: number;
   webpack?: IonWebpackStatus;
   plugins?: IonPluginsApi;
+  /** Per-plugin patch telemetry (applied/active/notices) for the harness. */
+  patches?: PatchStatsApi;
   ui?: IonUiApi;
 }
 
