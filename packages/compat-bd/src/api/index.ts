@@ -9,7 +9,8 @@
  * Apache-2.0 sources whose semantics this mirrors.
  */
 
-import { BoundLogger, Logger } from "./logger";
+import { Logger, boundLoggerFor, type BoundLogger } from "./logger";
+import { BoundPatcher, Patcher } from "./patcher";
 import { Webpack } from "./webpack";
 
 /** The BetterDiscord release whose API surface this adapter implements. */
@@ -17,18 +18,8 @@ const BD_VERSION = "1.14.2";
 
 const defaultLogger = new Logger();
 const webpackInstance = new Webpack();
-const boundLoggers = new Map<string, BoundLogger>();
+const patcherInstance = new Patcher();
 const instances = new Map<string, BdApi>();
-
-/** Resolve (and memoize) the scoped logger a plugin name maps to. */
-export function boundLoggerFor(pluginName: string): BoundLogger {
-  let scoped = boundLoggers.get(pluginName);
-  if (!scoped) {
-    scoped = new BoundLogger(pluginName);
-    boundLoggers.set(pluginName, scoped);
-  }
-  return scoped;
-}
 
 export class BdApi {
   /** The BetterDiscord version this surface mirrors (plugins feature-detect on it). */
@@ -42,7 +33,11 @@ export class BdApi {
   /** Module search — shared instance, exactly as upstream (never name-bound). */
   static readonly Webpack: Webpack = webpackInstance;
 
+  /** Monkey-patching: the static form takes the plugin name first. */
+  static readonly Patcher: Patcher = patcherInstance;
+
   readonly #scopedLogger: BoundLogger | null = null;
+  readonly #scopedPatcher: BoundPatcher | null = null;
 
   /**
    * `new BdApi(name)` yields the plugin-scoped instance (cached, so repeat
@@ -65,6 +60,7 @@ export class BdApi {
     if (cached) return cached;
 
     this.#scopedLogger = boundLoggerFor(pluginName);
+    this.#scopedPatcher = new BoundPatcher(pluginName);
     instances.set(pluginName, this);
   }
 
@@ -80,4 +76,17 @@ export class BdApi {
   get Webpack(): Webpack {
     return webpackInstance;
   }
+
+  /**
+   * Monkey-patcher. A named instance patches under that name; the generic
+   * instance keeps the unbound patcher — cast to the bound shape exactly as
+   * upstream casts it, so its methods still take the plugin name.
+   */
+  get Patcher(): BoundPatcher {
+    return this.#scopedPatcher ?? (patcherInstance as unknown as BoundPatcher);
+  }
 }
+
+// Upstream freezes both, so plugins cannot clobber the shared surfaces.
+Object.freeze(BdApi);
+Object.freeze(BdApi.prototype);

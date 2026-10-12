@@ -30,6 +30,23 @@ function parseType(type: string): LogType {
 const NAME_STYLE = "color: #3a71c1; font-weight: 700;";
 const MESSAGE_STYLE = "";
 
+const boundLoggers = new Map<string, BoundLogger>();
+
+/**
+ * Resolve (and memoize) the scoped logger a plugin name maps to. Lives here
+ * rather than in `api/index.ts` so the patcher can report a failing plugin's
+ * callback under that plugin's own name without importing the API surface
+ * (which imports the patcher).
+ */
+export function boundLoggerFor(pluginName: string): BoundLogger {
+  let scoped = boundLoggers.get(pluginName);
+  if (!scoped) {
+    scoped = new BoundLogger(pluginName);
+    boundLoggers.set(pluginName, scoped);
+  }
+  return scoped;
+}
+
 function log(pluginName: string, messages: readonly unknown[], type: LogType = "log"): void {
   const level = parseType(type);
   console[level](`%c[${pluginName}]%c`, NAME_STYLE, MESSAGE_STYLE, ...messages);
