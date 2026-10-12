@@ -1,38 +1,160 @@
 [
-  { "group": "A", "folder": "_api/commands" },
-  { "group": "A", "folder": "_api/contextMenu" },
-  { "group": "A", "folder": "_api/messageEvents" },
-  { "group": "A", "folder": "_api/messageAccessories" },
-  { "group": "A", "folder": "_api/messagePopover" },
-  { "group": "A", "folder": "_api/chatButtons" },
-  { "group": "A", "folder": "_api/userSettings" },
-  { "group": "B", "folder": "_api/dynamicImageModalApi" },
-  { "group": "B", "folder": "_api/notices" },
-  { "group": "B", "folder": "_api/badges" },
-  { "group": "B", "folder": "_core/settings" },
-  { "group": "B", "folder": "_core/concatenatedComponentExtractor" },
-  { "group": "B", "folder": "crashHandler" },
-  { "group": "B", "folder": "_core/supportHelper" },
-  { "group": "C", "folder": "webKeybinds.web" },
-  { "group": "C", "folder": "webContextMenus.web" },
+  { "group": "A", "folder": "_api/commands", "name": "CommandsAPI" },
+  { "group": "A", "folder": "_api/contextMenu", "name": "ContextMenuAPI" },
+  { "group": "A", "folder": "_api/messageEvents", "name": "MessageEventsAPI" },
+  { "group": "A", "folder": "_api/messageAccessories", "name": "MessageAccessoriesAPI" },
+  { "group": "A", "folder": "_api/messagePopover", "name": "MessagePopoverAPI" },
+  { "group": "A", "folder": "_api/chatButtons", "name": "ChatInputButtonAPI" },
+  { "group": "A", "folder": "_api/userSettings", "name": "UserSettingsAPI" },
+  {
+    "group": "B",
+    "folder": "_api/dynamicImageModalApi",
+    "name": "DynamicImageModalAPI",
+    "tier3": "Click a profile avatar/banner to open the image modal; zoom and prev/next must work."
+  },
+  {
+    "group": "B",
+    "folder": "_api/notices",
+    "name": "NoticesAPI",
+    "tier3": "Confirm an Ion/Vencord notice bar (if shown) renders under the top bar and dismisses."
+  },
+  {
+    "group": "B",
+    "folder": "_api/badges",
+    "name": "BadgeAPI",
+    "tier3": "Open a donor's profile and confirm their vencord.dev badges render (needs network)."
+  },
+  {
+    "group": "B",
+    "folder": "_core/settings",
+    "name": "Settings",
+    "tier3": "Open the Vencord settings tab from Ion's plugin list; plugin toggles must render. Cloud/Updater tabs are degraded by design (Ion owns those)."
+  },
+  {
+    "group": "B",
+    "folder": "_core/concatenatedComponentExtractor",
+    "name": "ConcatenatedComponentExtractor",
+    "tier3": "Infrastructure: confirm plugins that patch concatenated components (e.g. FakeNitro emoji picker) still work."
+  },
+  {
+    "group": "B",
+    "folder": "crashHandler",
+    "name": "CrashHandler",
+    "tier3": "No visible action expected: confirm no crash-report dialog appears during a normal session."
+  },
+  {
+    "group": "B",
+    "folder": "_core/supportHelper",
+    "name": "SupportHelper",
+    "tier3": "Expect Vencord's 'unsupported build' helper text on non-official builds — that is upstream behavior, not a bug."
+  },
+  {
+    "group": "C",
+    "folder": "webKeybinds.web",
+    "name": "WebKeybinds",
+    "tier3": "Confirm browser keybinds (F5/Ctrl+R reload, Ctrl+W close) behave per your Vesktop settings."
+  },
+  {
+    "group": "C",
+    "folder": "webContextMenus.web",
+    "name": "WebContextMenus",
+    "tier3": "Right-click a message/image and confirm web-style context items (Copy Image, Save Image) behave as in Vesktop."
+  },
   {
     "group": "C",
     "folder": "webScreenShareFixes.web",
-    "note": "deferred: blocked on screenshare audio parity"
+    "name": "WebScreenShareFixes",
+    "note": "deferred: blocked on screenshare audio parity",
+    "tier3": "Deferred (Q3): re-test together with Linux screenshare system audio."
   },
-  { "group": "C", "folder": "noDeepLinks.web" },
-  { "group": "C", "folder": "_core/noTrack" },
-  { "group": "C", "folder": "addAttachments" },
-  { "group": "D", "folder": "noTypingAnimation" },
-  { "group": "D", "folder": "alwaysAnimate" },
-  { "group": "D", "folder": "betterGifAltText" },
-  { "group": "D", "folder": "serverInfo" },
-  { "group": "D", "folder": "petpet" },
-  { "group": "D", "folder": "greetStickerPicker" },
-  { "group": "D", "folder": "volumeBooster" },
-  { "group": "D", "folder": "fixYoutubeEmbeds.desktop" },
-  { "group": "D", "folder": "fakeNitro" },
-  { "group": "D", "folder": "showHiddenChannels" },
-  { "group": "D", "folder": "experiments" },
-  { "group": "D", "folder": "fakeProfileThemes" }
+  {
+    "group": "C",
+    "folder": "noDeepLinks.web",
+    "name": "DisableDeepLinks",
+    "tier3": "Click a discord:// URL in the browser: no second client should spawn (links are disabled by design)."
+  },
+  {
+    "group": "C",
+    "folder": "_core/noTrack",
+    "name": "NoTrack",
+    "tier3": "DevTools → Network: confirm no requests to sentry.io or Discord analytics endpoints fire."
+  },
+  {
+    "group": "C",
+    "folder": "addAttachments",
+    "name": "AddAttachments",
+    "tier3": "In a chat, confirm the attachment flow can add a URL as a file attachment."
+  },
+  {
+    "group": "D",
+    "folder": "noTypingAnimation",
+    "name": "NoTypingAnimation",
+    "tier3": "Confirm the typing indicator appears/disappears without its animation (needs a live conversation)."
+  },
+  {
+    "group": "D",
+    "folder": "alwaysAnimate",
+    "name": "AlwaysAnimate",
+    "tier3": "Open the emoji/sticker picker and confirm previews loop continuously without hover."
+  },
+  {
+    "group": "D",
+    "folder": "betterGifAltText",
+    "name": "BetterGifAltText",
+    "tier3": "Hover a GIF embed and confirm the alt text describes the GIF, not just 'GIF'."
+  },
+  {
+    "group": "D",
+    "folder": "serverInfo",
+    "name": "ServerInfo",
+    "tier3": "Right-click a server: the ServerInfo entry must open with invite/owner details."
+  },
+  {
+    "group": "D",
+    "folder": "petpet",
+    "name": "petpet",
+    "tier3": "Right-click a user → Pet Pet: the generated image must appear in the message draft and send."
+  },
+  {
+    "group": "D",
+    "folder": "greetStickerPicker",
+    "name": "GreetStickerPicker",
+    "tier3": "Trigger a greeting flow and confirm sticker suggestions render and send."
+  },
+  {
+    "group": "D",
+    "folder": "volumeBooster",
+    "name": "VolumeBooster",
+    "tier3": "User Settings → Voice: the slider must be able to exceed 100% and audibly boost."
+  },
+  {
+    "group": "D",
+    "folder": "fixYoutubeEmbeds.desktop",
+    "name": "FixYoutubeEmbeds",
+    "tier3": "Paste a YouTube link in chat: the embed must use the fixed player (no broken iframe)."
+  },
+  {
+    "group": "D",
+    "folder": "fakeNitro",
+    "name": "FakeNitro",
+    "tier3": "Emoji picker in a DM: foreign-server emojis must be selectable and render when sent (test together with FakeProfileThemes)."
+  },
+  {
+    "group": "D",
+    "folder": "showHiddenChannels",
+    "name": "ShowHiddenChannels",
+    "tier3": "Channel list: locked channels must be visible greyed; opening one shows a read-only preview."
+  },
+  {
+    "group": "D",
+    "folder": "experiments",
+    "name": "Experiments",
+    "tier3": "User Settings → Experiments: page must render; view only, do not flip experiments you do not understand."
+  },
+  {
+    "group": "D",
+    "folder": "fakeProfileThemes",
+    "name": "FakeProfileThemes",
+    "tier3": "Open a profile → set a gradient; the background must apply and coexist with FakeNitro (test together)."
+  }
 ]
