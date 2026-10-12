@@ -62,9 +62,19 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
     const contents = win.webContents;
     const probe = async (expression: string): Promise<unknown> =>
       contents.executeJavaScript(expression).catch((error: unknown): unknown => String(error));
-    await tourSettingsUi(probe);
+
+    // Isolated profiles start at the login screen. The settings-modal tour
+    // only exists inside a logged-in app, so record the session state and
+    // gate the tour on it — the harness requires the settings probes only
+    // when a session was present.
+    const atLogin = (await probe("location.pathname.startsWith('/login')")) === true;
+    if (!atLogin) await tourSettingsUi(probe);
     const report: Record<string, unknown> = {
       reason,
+      // "logged-out" for a fresh isolated profile (no session): the
+      // settings-modal probes below are then expected to be false/empty
+      // and the harness skips them instead of failing the run.
+      session: atLogin ? "logged-out" : "in-app",
       url: contents.getURL(),
       title: contents.getTitle(),
       ionShellPreload: await probe(
