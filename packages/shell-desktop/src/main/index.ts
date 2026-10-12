@@ -5,9 +5,10 @@
  * `app.ready`, so settings are loaded synchronously at module scope.
  */
 
-import { app } from "electron";
+import { app, session } from "electron";
 import type { BrowserWindow } from "electron";
 
+import { registerCspHandler } from "./csp";
 import { buildChromiumSwitchPlan } from "./flags";
 import { registerIpcHandlers } from "./ipc";
 import { registerPermissionHandlers } from "./permissions";
@@ -47,6 +48,8 @@ if (!hasLock) {
   void app.whenReady().then(() => {
     registerPermissionHandlers();
     registerScreenShareHandler();
+    // Grants the vencord.dev hosts the bundled plugins call; see csp.ts.
+    registerCspHandler(session.defaultSession);
     // Before the window: the preload synchronously fetches the core bundle.
     registerIpcHandlers({ settings });
 
