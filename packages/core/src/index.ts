@@ -127,7 +127,7 @@ const webpackReady = new Promise<void>((resolve) => {
 /** Discovery surface for adapters; see `IonDiscoveryApi`. */
 const discovery: IonDiscoveryApi = {
   find: (filter, options) => find(filter, options),
-  findAll: (filter) => findAll(filter),
+  findAll: (filter, options) => findAll(filter, options),
   findByProps: (...props) => findByProps(...props),
   findByCode: (...code) => findByCode(...code),
   findStore: (name) => findStore(name),

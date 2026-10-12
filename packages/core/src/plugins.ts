@@ -240,12 +240,17 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
       recordsByName.set(definition.name, record);
       notify();
       // A plugin registered after boot (adapters, external files) starts
-      // immediately when enabled; its patches only affect modules that have
-      // not evaluated yet, the same rule upstream follows.
+      // when enabled; its patches only affect modules that have not
+      // evaluated yet, the same rule upstream follows. The stage still
+      // gates the start itself: adapters register before Discord's first
+      // script, so a webpack-ready or dom-ready plugin must not run its
+      // start() yet (boot phase 2 applies the same staging).
       if (booted && isEnabled(definition)) {
         enableDependencies(record);
         registerPatches(record);
-        void startWithDependencies(record, new Set());
+        void stageWaiter(definition.startAt ?? "init").then(() =>
+          isEnabled(definition) ? startWithDependencies(record, new Set()) : undefined,
+        );
       }
     },
 

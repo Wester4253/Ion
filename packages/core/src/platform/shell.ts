@@ -104,26 +104,26 @@ export interface IonPlugin {
   /** Display name; must be unique (patch notices are attributed by it). */
   readonly name: string;
   readonly description: string;
-  readonly authors?: readonly { readonly name: string; readonly id?: string }[];
-  readonly version?: string;
+  readonly authors?: readonly { readonly name: string; readonly id?: string }[] | undefined;
+  readonly version?: string | undefined;
   /** Enabled unless the user disabled it; defaults to true. */
-  readonly defaultEnabled?: boolean;
+  readonly defaultEnabled?: boolean | undefined;
   /**
    * Force-enabled and hidden from toggling (Vencord's `required`): core
    * runtime plugins that other plugins assume present.
    */
-  readonly required?: boolean;
+  readonly required?: boolean | undefined;
   /**
    * Other plugins (by name) this one needs: starting an enabled plugin
    * enables its dependencies first, exactly like upstream's dependency
    * resolution. A missing dependency logs a warning and is skipped.
    */
-  readonly dependencies?: readonly string[];
+  readonly dependencies?: readonly string[] | undefined;
   /**
    * Source patches, registered with the engine before Discord evaluates its
    * modules. Already-evaluated modules are never affected by late patches.
    */
-  readonly patches?: readonly IonPluginPatch[];
+  readonly patches?: readonly IonPluginPatch[] | undefined;
   /**
    * When `start()` runs relative to Discord's boot:
    * - `undefined` (default): as soon as the host boots — for Ion's own
@@ -135,7 +135,7 @@ export interface IonPlugin {
    * Patches register regardless of the stage, at boot, before Discord
    * evaluates anything — only feature registration waits for the stage.
    */
-  readonly startAt?: "init" | "webpack-ready" | "dom-ready";
+  readonly startAt?: "init" | "webpack-ready" | "dom-ready" | undefined;
   /**
    * Persisted enablement owned by a foreign plugin format's own settings
    * store (Vencord keeps `Settings.plugins.<name>.enabled`). When present,
@@ -198,8 +198,8 @@ export interface IonUiApi {
 export interface IonDiscoveryApi {
   /** First loaded module (or nested export) matching the filter. */
   find(filter: ModuleFilter, options?: { readonly topLevelOnly?: boolean }): unknown;
-  /** All loaded modules (and nested exports) matching the filter. */
-  findAll(filter: ModuleFilter): unknown[];
+  /** All loaded modules (or nested exports) matching the filter. */
+  findAll(filter: ModuleFilter, options?: { readonly topLevelOnly?: boolean }): unknown[];
   /** First module exposing all the given properties (logs a warning on miss). */
   findByProps(...props: string[]): unknown;
   /** First function whose source contains all fragments (logs on miss). */
