@@ -9,8 +9,11 @@
  * Apache-2.0 sources whose semantics this mirrors.
  */
 
+import { Data, BoundData } from "./data";
+import { DOM, BoundDOM } from "./dom";
 import { Logger, boundLoggerFor, type BoundLogger } from "./logger";
 import { BoundPatcher, Patcher } from "./patcher";
+import { Utils } from "./utils";
 import { Webpack } from "./webpack";
 
 /** The BetterDiscord release whose API surface this adapter implements. */
@@ -19,6 +22,8 @@ const BD_VERSION = "1.14.2";
 const defaultLogger = new Logger();
 const webpackInstance = new Webpack();
 const patcherInstance = new Patcher();
+const dataInstance = new Data();
+const domInstance = new DOM();
 const instances = new Map<string, BdApi>();
 
 export class BdApi {
@@ -36,8 +41,19 @@ export class BdApi {
   /** Monkey-patching: the static form takes the plugin name first. */
   static readonly Patcher: Patcher = patcherInstance;
 
+  /** Plugin data: the static form takes the plugin name first. */
+  static readonly Data: Data = dataInstance;
+
+  /** DOM manipulation: the static form takes the plugin name first. */
+  static readonly DOM: DOM = domInstance;
+
+  /** Shared utilities — stateless, so upstream never name-binds them. */
+  static readonly Utils: typeof Utils = Utils;
+
   readonly #scopedLogger: BoundLogger | null = null;
   readonly #scopedPatcher: BoundPatcher | null = null;
+  readonly #scopedData: BoundData | null = null;
+  readonly #scopedDOM: BoundDOM | null = null;
 
   /**
    * `new BdApi(name)` yields the plugin-scoped instance (cached, so repeat
@@ -61,6 +77,8 @@ export class BdApi {
 
     this.#scopedLogger = boundLoggerFor(pluginName);
     this.#scopedPatcher = new BoundPatcher(pluginName);
+    this.#scopedData = new BoundData(pluginName);
+    this.#scopedDOM = new BoundDOM(pluginName);
     instances.set(pluginName, this);
   }
 
@@ -84,6 +102,28 @@ export class BdApi {
    */
   get Patcher(): BoundPatcher {
     return this.#scopedPatcher ?? (patcherInstance as unknown as BoundPatcher);
+  }
+
+  /**
+   * Plugin data. A named instance reads and writes that plugin's store; the
+   * generic instance keeps the unbound surface — cast the way upstream
+   * casts it — so its methods still take the plugin name.
+   */
+  get Data(): BoundData {
+    return this.#scopedData ?? (dataInstance as unknown as BoundData);
+  }
+
+  /**
+   * DOM manipulation. A named instance scopes style ids to the plugin name;
+   * the generic instance keeps the unbound surface, as upstream does.
+   */
+  get DOM(): BoundDOM {
+    return this.#scopedDOM ?? (domInstance as unknown as BoundDOM);
+  }
+
+  /** Shared utilities — stateless, so upstream never name-binds them. */
+  get Utils(): typeof Utils {
+    return Utils;
   }
 }
 
