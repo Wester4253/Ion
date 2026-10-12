@@ -13,7 +13,7 @@ import type { Logger } from "../logging";
 import type { Patch, PatchStatsApi } from "../patches";
 import type { PluginSettings } from "../settings";
 import type { CodeFilter, ModuleFilter } from "../webpack/filters";
-import type { ModuleFactory } from "../webpack/types";
+import type { ModuleFactory, WebpackRequire } from "../webpack/types";
 
 export type ShellKind = "desktop" | "android";
 
@@ -197,7 +197,7 @@ export interface IonUiApi {
  */
 export interface IonDiscoveryApi {
   /** First loaded module (or nested export) matching the filter. */
-  find(filter: ModuleFilter): unknown;
+  find(filter: ModuleFilter, options?: { readonly topLevelOnly?: boolean }): unknown;
   /** All loaded modules (and nested exports) matching the filter. */
   findAll(filter: ModuleFilter): unknown[];
   /** First module exposing all the given properties (logs a warning on miss). */
@@ -212,6 +212,12 @@ export interface IonDiscoveryApi {
   findModuleFactory(...code: CodeFilter): ModuleFactory | null;
   /** Search factory sources; returns every matching id → factory. */
   search(...code: CodeFilter): Record<string, ModuleFactory>;
+  /**
+   * Every captured `__webpack_require__` instance (one per bundler runtime).
+   * Adapters emulate upstream APIs that require a module by id on top of
+   * these.
+   */
+  getRequires(): readonly WebpackRequire[];
   /** Call `listener` with the first matching module; returns unsubscribe. */
   waitFor(
     filter: string | readonly string[] | ModuleFilter,

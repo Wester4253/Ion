@@ -26,7 +26,7 @@ import { filters, stringMatches, type CodeFilter, type ModuleFilter } from "./fi
 import { findAllInCache, findInCache, type FindOptions, type ModuleCache } from "./find";
 import { installChunkHook, type ChunkHook } from "./hook";
 import { createWebpackRuntime, type WebpackRuntime } from "./runtime";
-import type { ModuleFactory } from "./types";
+import type { ModuleFactory, WebpackRequire } from "./types";
 
 const logger: Logger = createLogger("webpack");
 
@@ -59,6 +59,11 @@ export function initWebpack(
 ): void {
   if (hook) return;
   hook = installChunkHook(scope, runtime.wrapChunkModules);
+}
+
+/** Every captured `__webpack_require__` instance (one per bundler runtime). */
+export function getRequires(): readonly WebpackRequire[] {
+  return runtime.getRequires();
 }
 
 function everyCache(): ModuleCache[] {

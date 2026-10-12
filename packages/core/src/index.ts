@@ -29,6 +29,7 @@ import {
   findStore,
   findStoreLazy,
   getPatchRegistry,
+  getRequires,
   initWebpack,
   probeHealth,
   search,
@@ -125,7 +126,7 @@ const webpackReady = new Promise<void>((resolve) => {
 
 /** Discovery surface for adapters; see `IonDiscoveryApi`. */
 const discovery: IonDiscoveryApi = {
-  find: (filter) => find(filter),
+  find: (filter, options) => find(filter, options),
   findAll: (filter) => findAll(filter),
   findByProps: (...props) => findByProps(...props),
   findByCode: (...code) => findByCode(...code),
@@ -133,6 +134,7 @@ const discovery: IonDiscoveryApi = {
   findModuleId: (...code) => findModuleId(...code),
   findModuleFactory: (...code) => findModuleFactory(...code),
   search: (...code) => search(...code),
+  getRequires: () => getRequires(),
   waitFor: (filter, listener) => waitFor(filter, listener),
   findLazy: (filter) => findLazy(filter),
   findByPropsLazy: (...props) => findByPropsLazy(...props),

@@ -3,3 +3,4 @@ out/
 release/
 coverage/
 pnpm-lock.yaml
+packages/compat-vencord/vendor/

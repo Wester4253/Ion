@@ -28,7 +28,17 @@ const platformNeutralImports = (extra: readonly RestrictedPattern[] = []): Linte
 ];
 
 export default defineConfig(
-  { ignores: ["**/dist/**", "**/out/**", "**/release/**", "**/coverage/**"] },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/out/**",
+      "**/release/**",
+      "**/coverage/**",
+      // Verbatim upstream copies: provenance and formatting are pinned by
+      // `tools/vendor.mjs --check`, not by our lint rules.
+      "packages/compat-vencord/vendor/**",
+    ],
+  },
   {
     extends: [js.configs.recommended],
     files: ["**/*.mjs"],
