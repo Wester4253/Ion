@@ -8,19 +8,19 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "ion": {
-    "bundles": [
-      {
-        "entry": "src/index.ts",
-        "outfile": "dist/index.js",
-        "platform": "browser",
-        "format": "iife"
-      }
-    ]
-  },
   "scripts": {
-    "build": "node ../../scripts/bundle.mjs",
-    "dev": "node ../../scripts/bundle.mjs --watch",
-    "typecheck": "tsc -p tsconfig.json"
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json",
+    "vendor": "node tools/vendor.mjs"
+  },
+  "dependencies": {
+    "@ion/core": "workspace:*",
+    "@intrnl/xxhash64": "^0.1.2",
+    "diff": "^9.0.0",
+    "fflate": "^0.8.3",
+    "gifenc": "^1.0.3",
+    "nanoid": "^5.1.16",
+    "virtual-merge": "^1.0.1"
   }
 }

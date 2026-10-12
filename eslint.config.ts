@@ -66,6 +66,13 @@ export default defineConfig(
     rules: { "no-console": "off" },
   },
   {
+    // A global ambient declaration file cannot use top-level imports — they
+    // would turn it into a module and break the `declare module` blocks it
+    // exists to host — so its references use inline `import()` types.
+    files: ["packages/compat-vencord/src/vendor-modules.d.ts"],
+    rules: { "@typescript-eslint/consistent-type-imports": "off" },
+  },
+  {
     files: ["packages/core/**/*.ts"],
     rules: {
       "no-restricted-imports": platformNeutralImports([
