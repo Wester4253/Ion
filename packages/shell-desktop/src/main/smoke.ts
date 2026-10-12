@@ -209,6 +209,8 @@ export function runSmoke(
     report["ionSelectEscapeClosed"] = await probe(
       "(() => { const host = document.querySelector('[class*=contentBody] ion-settings-panel'); return host?.shadowRoot?.querySelector('.ion-select-menu') === null; })()",
     );
+    // The soak window, so the harness can tell a Tier 2 run from a quick one.
+    report["settleMs"] = settleMs;
     writeFileSync(join(outputDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(report)}\n`);
     app.exit(0);
