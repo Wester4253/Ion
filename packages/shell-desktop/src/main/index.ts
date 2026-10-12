@@ -12,12 +12,18 @@ import { buildChromiumSwitchPlan } from "./flags";
 import { registerIpcHandlers } from "./ipc";
 import { registerPermissionHandlers } from "./permissions";
 import { registerScreenShareHandler } from "./screenshare";
+import { parseProfileArg } from "./profile";
 import { parseSmokeArg, runSmoke } from "./smoke";
 import { ShellSettingsStore, shellSettingsPath } from "./store";
 import { createMainWindow } from "./window";
 
 // Must happen before any getPath() call so settings land in ~/.config/Ion.
 app.setName("Ion");
+
+// Isolated-profile override: must precede every getPath() read so the run's
+// Chromium data, single-instance lock, and Ion settings all move with it.
+const profileDir = parseProfileArg(process.argv);
+if (profileDir !== null) app.setPath("userData", profileDir);
 
 const settings = new ShellSettingsStore(shellSettingsPath());
 
