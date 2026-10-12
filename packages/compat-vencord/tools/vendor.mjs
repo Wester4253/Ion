@@ -6,11 +6,12 @@
  *
  * Walks the transitive import closure of every plugin in `acceptance.json`
  * (plus cross-imported plugin libraries), copies those files byte-for-byte
- * into `vendor/vencord/`, and writes `vendor/vencord/MANIFEST.json` with the
- * upstream commit and a sha256 per file so the vendored tree stays
- * verifiable. Files that Ion deliberately replaces (the webpack hook, the
- * plugin bootstrap, main-process modules) are listed in the manifest as
- * shims instead of being copied — every exclusion carries a reason.
+ * into `vendor/vencord/` together with their license texts, and writes
+ * `vendor/vencord/MANIFEST.json` with the upstream commit and a sha256 per
+ * file so the vendored tree stays verifiable. Files that Ion deliberately
+ * replaces (the webpack hook, the plugin bootstrap, main-process modules)
+ * are listed in the manifest as shims instead of being copied — every
+ * exclusion carries a reason.
  *
  * `--check` re-verifies an existing vendor tree against the manifest
  * (used by CI to prove the tree was not edited by hand).
@@ -61,6 +62,12 @@ const SHIMS = {
 
 /** Specifiers that are virtual modules or host-provided globals. */
 const VIRTUAL = new Set(["~plugins", "~git-hash", "~git-remote"]);
+
+/**
+ * License texts that ship with the copies they cover — attribution must
+ * travel with vendored code even where there is no import edge.
+ */
+const LICENSES = ["LICENSE", "packages/discord-types/LICENSE"];
 
 function resolveFile(base) {
   const candidates = [
@@ -252,9 +259,16 @@ function main() {
     externals: [...closure.externals].sort(),
     files: {},
   };
-  for (const file of [...closure.files].sort()) {
-    const rel = relative(upstream, file);
-    manifest.files[rel] = sha256(readFileSync(file));
+  const copied = [...new Set([...closure.files, ...LICENSES.map((rel) => join(upstream, rel))])]
+    .map((file) => relative(upstream, file))
+    .sort();
+  for (const rel of copied) {
+    const path = join(upstream, rel);
+    if (!existsSync(path)) {
+      process.stderr.write(`upstream file missing: ${rel}\n`);
+      process.exit(1);
+    }
+    manifest.files[rel] = sha256(readFileSync(path));
   }
 
   const manifestPath = join(vendorRoot, "MANIFEST.json");

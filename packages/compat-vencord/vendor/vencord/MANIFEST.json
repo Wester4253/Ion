@@ -30,6 +30,8 @@
     "virtual-merge"
   ],
   "files": {
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "packages/discord-types/LICENSE": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118",
     "packages/discord-types/enums/activity.ts": "41e04262a7d3526f856f0fc5c302bff045b7985e9bc6c2869131c1ead21d1773",
     "packages/discord-types/enums/application.ts": "e4a9465b6a2d91f7ae05e44ab8b1a263bd4aaefa71bd271091e7995f6071ce74",
     "packages/discord-types/enums/channel.ts": "811e4258b9be861e3ad0c96e56251f17ff7a659f8d33ce360e36e54f0580e14b",
