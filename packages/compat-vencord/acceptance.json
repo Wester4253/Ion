@@ -1,11 +1,46 @@
 [
-  { "group": "A", "folder": "_api/commands", "name": "CommandsAPI" },
-  { "group": "A", "folder": "_api/contextMenu", "name": "ContextMenuAPI" },
-  { "group": "A", "folder": "_api/messageEvents", "name": "MessageEventsAPI" },
-  { "group": "A", "folder": "_api/messageAccessories", "name": "MessageAccessoriesAPI" },
-  { "group": "A", "folder": "_api/messagePopover", "name": "MessagePopoverAPI" },
-  { "group": "A", "folder": "_api/chatButtons", "name": "ChatInputButtonAPI" },
-  { "group": "A", "folder": "_api/userSettings", "name": "UserSettingsAPI" },
+  {
+    "group": "A",
+    "folder": "_api/commands",
+    "name": "CommandsAPI",
+    "tier3": "Type `/` in a channel and confirm Vencord's slash commands (/shrug, /petpet) appear and send expanded text."
+  },
+  {
+    "group": "A",
+    "folder": "_api/contextMenu",
+    "name": "ContextMenuAPI",
+    "tier3": "Right-click a message/user/server and confirm Vencord-provided menu items (ServerInfo, Pet Pet) appear."
+  },
+  {
+    "group": "A",
+    "folder": "_api/messageEvents",
+    "name": "MessageEventsAPI",
+    "tier3": "With an outbound-message plugin enabled, confirm normal sending still works \u2014 this API owns send/edit hooks."
+  },
+  {
+    "group": "A",
+    "folder": "_api/messageAccessories",
+    "name": "MessageAccessoriesAPI",
+    "tier3": "Confirm accessory plugins render their content under messages (badges, buttons, images)."
+  },
+  {
+    "group": "A",
+    "folder": "_api/messagePopover",
+    "name": "MessagePopoverAPI",
+    "tier3": "Hover a message that has a plugin popover button (e.g. from permissions tools) and confirm it renders."
+  },
+  {
+    "group": "A",
+    "folder": "_api/chatButtons",
+    "name": "ChatInputButtonAPI",
+    "tier3": "Confirm plugin buttons next to the chat input render (e.g. AddAttachments' attachment button)."
+  },
+  {
+    "group": "A",
+    "folder": "_api/userSettings",
+    "name": "UserSettingsAPI",
+    "tier3": "Open a plugin's settings from the Vencord plugin list gear and confirm the page renders."
+  },
   {
     "group": "B",
     "folder": "_api/dynamicImageModalApi",
@@ -46,7 +81,7 @@
     "group": "B",
     "folder": "_core/supportHelper",
     "name": "SupportHelper",
-    "tier3": "Expect Vencord's 'unsupported build' helper text on non-official builds — that is upstream behavior, not a bug."
+    "tier3": "Expect Vencord's 'unsupported build' helper text on non-official builds \u2014 that is upstream behavior, not a bug."
   },
   {
     "group": "C",
@@ -77,7 +112,7 @@
     "group": "C",
     "folder": "_core/noTrack",
     "name": "NoTrack",
-    "tier3": "DevTools → Network: confirm no requests to sentry.io or Discord analytics endpoints fire."
+    "tier3": "DevTools \u2192 Network: confirm no requests to sentry.io or Discord analytics endpoints fire."
   },
   {
     "group": "C",
@@ -113,7 +148,7 @@
     "group": "D",
     "folder": "petpet",
     "name": "petpet",
-    "tier3": "Right-click a user → Pet Pet: the generated image must appear in the message draft and send."
+    "tier3": "Right-click a user \u2192 Pet Pet: the generated image must appear in the message draft and send."
   },
   {
     "group": "D",
@@ -125,7 +160,7 @@
     "group": "D",
     "folder": "volumeBooster",
     "name": "VolumeBooster",
-    "tier3": "User Settings → Voice: the slider must be able to exceed 100% and audibly boost."
+    "tier3": "User Settings \u2192 Voice: the slider must be able to exceed 100% and audibly boost."
   },
   {
     "group": "D",
@@ -149,12 +184,12 @@
     "group": "D",
     "folder": "experiments",
     "name": "Experiments",
-    "tier3": "User Settings → Experiments: page must render; view only, do not flip experiments you do not understand."
+    "tier3": "User Settings \u2192 Experiments: page must render; view only, do not flip experiments you do not understand."
   },
   {
     "group": "D",
     "folder": "fakeProfileThemes",
     "name": "FakeProfileThemes",
-    "tier3": "Open a profile → set a gradient; the background must apply and coexist with FakeNitro (test together)."
+    "tier3": "Open a profile \u2192 set a gradient; the background must apply and coexist with FakeNitro (test together)."
   }
 ]

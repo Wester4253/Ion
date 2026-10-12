@@ -3,5 +3,6 @@ dist/
 out/
 release/
 coverage/
+compat-runs/
 *.tsbuildinfo
 .DS_Store

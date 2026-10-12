@@ -1,0 +1,340 @@
+/**
+ * Pure analysis: a smoke report + the acceptance list → per-plugin verdicts.
+ *
+ * No I/O and no Electron — the classifier is unit-tested, and the CLI only
+ * feeds it files. Verdict semantics (see AGENTS.md's tier definitions):
+ *
+ * - Tier 1 (load): registered, start did not throw, no error-level patch
+ *   notices. The smoke snapshot is taken at the end of the run, which
+ *   subsumes load time — nothing retries a failed start, and patch notices
+ *   are cumulative. A patch that failed late is conservatively counted here.
+ * - Tier 2 (soak): additionally no uncaught renderer error attributable to
+ *   the plugin through the end of the soak window. Only measured when the
+ *   run's settle meets TIER2_MIN_SOAK_MS; otherwise "not-run" — a quick
+ *   verification run never claims Tier 2.
+ * - Tier 3 (owner) is always pending: the hand-check line travels with each
+ *   plugin so the generated scoreboard doubles as the checklist.
+ *
+ * Console warnings/errors are attributed to plugins by anchored patterns
+ * (bracketed prefix, host "plugin <name>" phrasing, translator "<name>: "
+ * prefix). Anything unmatched stays visible as run notes instead of being
+ * silently dropped or guessed at.
+ */
+
+/** One entry of compat-vencord's acceptance.json. */
+export interface AcceptanceEntry {
+  readonly group: "A" | "B" | "C" | "D";
+  readonly folder: string;
+  readonly name: string;
+  readonly note?: string;
+  readonly tier3?: string;
+}
+
+export interface PatchNotice {
+  readonly level: "warn" | "error";
+  readonly message: string;
+}
+
+export interface PluginPatchStats {
+  readonly registered: number;
+  readonly applied: number;
+  readonly active: number;
+  readonly notices: readonly PatchNotice[];
+}
+
+/** The subset of shell-desktop's smoke report this classifier consumes. */
+export interface SmokeReport {
+  readonly session?: string;
+  readonly settleMs?: number;
+  readonly pluginsStatus?: {
+    readonly status?: {
+      readonly registered?: number;
+      readonly started?: number;
+      readonly failed?: number;
+    };
+    readonly ids?: readonly string[];
+    readonly failures?: readonly { readonly id: string; readonly error: string }[];
+  } | null;
+  readonly rendererErrors?: readonly string[];
+  readonly expectedErrors?: Record<string, number>;
+  readonly warnings?: readonly string[];
+  readonly patchStats?: Record<string, PluginPatchStats> | null;
+}
+
+/** Soak window required before Tier 2 may be claimed. */
+export const TIER2_MIN_SOAK_MS = 120_000;
+
+export type TierVerdict = "pass" | "fail" | "not-run";
+export type PluginStatus = "pass" | "warnings" | "fail" | "deferred";
+
+/** How the plugin fared at load, in the harness's outcome vocabulary. */
+export type LoadOutcome = "loaded" | "loaded-with-warnings" | "failed" | "not-registered";
+
+export interface CompatPluginReport {
+  readonly name: string;
+  readonly group: string;
+  readonly outcome: LoadOutcome;
+  readonly tier1: TierVerdict;
+  readonly tier2: TierVerdict;
+  readonly status: PluginStatus;
+  /** One line; non-null for every non-pass status and every warning. */
+  readonly reason: string | null;
+  /** Host lifecycle state, or null when the plugin never registered. */
+  readonly state: string | null;
+  readonly startError: string | null;
+  readonly patches: {
+    readonly registered: number;
+    readonly applied: number;
+    readonly active: number;
+    readonly errorNotices: readonly string[];
+    readonly warnNotices: readonly string[];
+  };
+  readonly warnings: readonly string[];
+  readonly handCheck: string;
+}
+
+export interface CompatReport {
+  readonly generatedAt: string;
+  readonly meta: {
+    readonly upstream: string;
+    readonly session: string;
+    readonly soakMs: number;
+    readonly tier2Run: boolean;
+  };
+  readonly summary: {
+    readonly total: number;
+    readonly pass: number;
+    readonly warnings: number;
+    readonly fail: number;
+    readonly deferred: number;
+  };
+  readonly run: {
+    readonly registered: number;
+    readonly started: number;
+    readonly failed: number;
+    readonly rendererErrors: readonly string[];
+    readonly unattributedRendererErrors: readonly string[];
+    readonly expectedErrors: readonly { readonly reason: string; readonly count: number }[];
+    readonly unattributedWarnings: readonly string[];
+    readonly patchTotals: {
+      readonly registered: number;
+      readonly applied: number;
+      readonly active: number;
+    };
+  };
+  readonly plugins: readonly CompatPluginReport[];
+  /** True only when every check ran clean: no renderer errors, no failures. */
+  readonly runHealthy: boolean;
+}
+
+export interface AnalyzeOptions {
+  readonly generatedAt: string;
+  readonly upstream: string;
+}
+
+const MAX_REASON_LENGTH = 160;
+
+/** Collapse a message into one report-sized line. */
+function oneLine(message: string): string {
+  const collapsed = message.replace(/\s+/g, " ").trim();
+  return collapsed.length <= MAX_REASON_LENGTH
+    ? collapsed
+    : `${collapsed.slice(0, MAX_REASON_LENGTH - 1)}…`;
+}
+
+/** Patterns that identify a message as belonging to `name`. */
+function isAttributedTo(message: string, name: string): boolean {
+  return (
+    message.startsWith(`[${name}]`) ||
+    message.startsWith(`${name}:`) ||
+    new RegExp(`\\bplugin ${name}\\b`).test(message)
+  );
+}
+
+/** Split messages into those attributed to `name` and the rest. */
+function partitionAttributed(
+  messages: readonly string[],
+  name: string,
+): [attributed: string[], rest: string[]] {
+  const attributed: string[] = [];
+  const rest: string[] = [];
+  for (const message of messages) {
+    (isAttributedTo(message, name) ? attributed : rest).push(message);
+  }
+  return [attributed, rest];
+}
+
+const EMPTY_PATCHES: PluginPatchStats = { registered: 0, applied: 0, active: 0, notices: [] };
+
+/** Classify every acceptance plugin against one smoke run. */
+export function analyze(
+  smoke: SmokeReport,
+  acceptance: readonly AcceptanceEntry[],
+  options: AnalyzeOptions,
+): CompatReport {
+  const soakMs = smoke.settleMs ?? 0;
+  const tier2Run = soakMs >= TIER2_MIN_SOAK_MS;
+  const ids = smoke.pluginsStatus?.ids ?? [];
+  const states = new Map<string, string>();
+  for (const entry of ids) {
+    const separator = entry.lastIndexOf(":");
+    if (separator > 0) states.set(entry.slice(0, separator), entry.slice(separator + 1));
+  }
+  const startErrors = new Map(
+    (smoke.pluginsStatus?.failures ?? []).map((failure) => [failure.id, failure.error]),
+  );
+  const rendererErrors = smoke.rendererErrors ?? [];
+  const warnings = smoke.warnings ?? [];
+  const patchStats = smoke.patchStats ?? {};
+
+  // Renderer errors are attributed once for the whole run; leftovers become
+  // run-level failures (never silently dropped).
+  const unattributedRendererErrors: string[] = [];
+  const perPluginRendererErrors = new Map<string, string[]>();
+  {
+    let rest = [...rendererErrors];
+    for (const entry of acceptance) {
+      const [mine, leftover] = partitionAttributed(rest, entry.name);
+      if (mine.length > 0) perPluginRendererErrors.set(entry.name, mine);
+      rest = leftover;
+    }
+    unattributedRendererErrors.push(...rest);
+  }
+
+  let unattributedWarnings = [...warnings];
+  const plugins: CompatPluginReport[] = [];
+
+  for (const entry of acceptance) {
+    const [pluginWarnings, leftover] = partitionAttributed(unattributedWarnings, entry.name);
+    unattributedWarnings = leftover;
+
+    const registered = states.has(entry.name);
+    const state = states.get(entry.name) ?? null;
+    const startError = startErrors.get(entry.name) ?? null;
+    const stats = patchStats[entry.name] ?? EMPTY_PATCHES;
+    const errorNotices = stats.notices
+      .filter((notice) => notice.level === "error")
+      .map((notice) => oneLine(notice.message));
+    const warnNotices = stats.notices
+      .filter((notice) => notice.level === "warn")
+      .map((notice) => oneLine(notice.message));
+    const pluginRendererErrors = perPluginRendererErrors.get(entry.name) ?? [];
+
+    // Tier 1 — load.
+    let tier1: TierVerdict = "pass";
+    let tier1Reason: string | null = null;
+    if (!registered) {
+      tier1 = "fail";
+      tier1Reason = "did not register — translation failed (see the run's renderer errors)";
+    } else if (state === "failed" || startError !== null) {
+      tier1 = "fail";
+      tier1Reason = `start failed: ${oneLine(startError ?? "unknown error")}`;
+    } else if (errorNotices.length > 0) {
+      tier1 = "fail";
+      tier1Reason = `patch failed: ${errorNotices[0] ?? "unknown notice"}`;
+    }
+
+    // Tier 2 — soak. A measured failure is always claimable; a pass is only
+    // claimed when the run actually soaked long enough.
+    let tier2: TierVerdict = "not-run";
+    let tier2Reason: string | null = null;
+    if (tier1 === "fail") {
+      tier2 = "fail";
+      tier2Reason = tier1Reason;
+    } else if (pluginRendererErrors.length > 0) {
+      tier2 = "fail";
+      const [firstError = "unknown error"] = pluginRendererErrors;
+      tier2Reason = `uncaught error: ${oneLine(firstError)}`;
+    } else if (tier2Run) {
+      tier2 = "pass";
+    }
+
+    const deferred = entry.note?.includes("deferred") ?? false;
+    const outcome: LoadOutcome = !registered
+      ? "not-registered"
+      : tier1 === "fail"
+        ? "failed"
+        : pluginWarnings.length + warnNotices.length > 0
+          ? "loaded-with-warnings"
+          : "loaded";
+
+    let status: PluginStatus;
+    let reason: string | null;
+    if (tier1 === "fail" || tier2 === "fail") {
+      status = "fail";
+      reason = oneLine((tier1 === "fail" ? tier1Reason : tier2Reason) ?? "failed");
+    } else if (deferred) {
+      status = "deferred";
+      reason = oneLine(entry.note ?? "deferred");
+    } else if (outcome === "loaded-with-warnings") {
+      status = "warnings";
+      const first = [...pluginWarnings, ...warnNotices][0] ?? "unknown warning";
+      reason = oneLine(first);
+    } else {
+      status = "pass";
+      reason = null;
+    }
+
+    plugins.push({
+      name: entry.name,
+      group: entry.group,
+      outcome,
+      tier1,
+      tier2,
+      status,
+      reason,
+      state,
+      startError,
+      patches: {
+        registered: stats.registered,
+        applied: stats.applied,
+        active: stats.active,
+        errorNotices,
+        warnNotices,
+      },
+      warnings: [...pluginWarnings, ...warnNotices].map(oneLine),
+      handCheck: entry.tier3 ?? "—",
+    });
+  }
+
+  const summary = {
+    total: plugins.length,
+    pass: plugins.filter((plugin) => plugin.status === "pass").length,
+    warnings: plugins.filter((plugin) => plugin.status === "warnings").length,
+    fail: plugins.filter((plugin) => plugin.status === "fail").length,
+    deferred: plugins.filter((plugin) => plugin.status === "deferred").length,
+  };
+
+  const patchTotals = { registered: 0, applied: 0, active: 0 };
+  for (const stats of Object.values(patchStats)) {
+    patchTotals.registered += stats.registered;
+    patchTotals.applied += stats.applied;
+    patchTotals.active += stats.active;
+  }
+
+  return {
+    generatedAt: options.generatedAt,
+    meta: {
+      upstream: options.upstream,
+      session: smoke.session ?? "unknown",
+      soakMs,
+      tier2Run,
+    },
+    summary,
+    run: {
+      registered: smoke.pluginsStatus?.status?.registered ?? 0,
+      started: smoke.pluginsStatus?.status?.started ?? 0,
+      failed: smoke.pluginsStatus?.status?.failed ?? 0,
+      rendererErrors: rendererErrors.map(oneLine),
+      unattributedRendererErrors: unattributedRendererErrors.map(oneLine),
+      expectedErrors: Object.entries(smoke.expectedErrors ?? {}).map(([reason, count]) => ({
+        reason,
+        count,
+      })),
+      unattributedWarnings: unattributedWarnings.map(oneLine),
+      patchTotals,
+    },
+    plugins,
+    runHealthy: rendererErrors.length === 0,
+  };
+}

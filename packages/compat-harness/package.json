@@ -17,6 +17,7 @@
   "scripts": {
     "build": "node ../../scripts/bundle.mjs",
     "dev": "node ../../scripts/bundle.mjs --watch",
+    "report": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json"
   }
 }
