@@ -47,6 +47,14 @@ export interface PluginHostOptions {
   /** The shared registry the webpack runtime applies patches from. */
   readonly registry: PatchRegistry;
   readonly settings: SettingsStore;
+  /**
+   * Readiness waiters for `startAt` stages. Missing waiters resolve
+   * immediately, which is also what unit tests want.
+   */
+  readonly stages?: {
+    "webpack-ready"?: () => Promise<void>;
+    "dom-ready"?: () => Promise<void>;
+  };
 }
 
 export interface PluginHost extends IonPluginsApi {
@@ -77,11 +85,25 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
   const listeners = new Set<() => void>();
   let booted = false;
 
-  const isEnabled = (definition: IonPlugin): boolean =>
+  const isEnabled = (definition: IonPlugin): boolean => {
     // `required` overrides persisted state: core runtime plugins are
     // force-enabled exactly like upstream, and cannot be toggled off.
-    definition.required === true ||
-    settings.get(`${ENABLED_KEY_PREFIX}${definition.id}`, definition.defaultEnabled ?? true);
+    if (definition.required === true) return true;
+    const external = definition.enabledState?.read();
+    if (external !== undefined) return external;
+    return settings.get(`${ENABLED_KEY_PREFIX}${definition.id}`, definition.defaultEnabled ?? true);
+  };
+
+  /** Persist enablement through the plugin's own store when it has one. */
+  const writeEnabled = (definition: IonPlugin, enabled: boolean): void => {
+    if (definition.enabledState) definition.enabledState.write(enabled);
+    else settings.set(`${ENABLED_KEY_PREFIX}${definition.id}`, enabled);
+  };
+
+  const stageWaiter = (stage: NonNullable<IonPlugin["startAt"]>): Promise<void> => {
+    if (stage === "init") return Promise.resolve();
+    return options.stages?.[stage]?.() ?? Promise.resolve();
+  };
 
   const notify = (): void => {
     for (const listener of listeners) listener();
@@ -104,7 +126,10 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
       if (seen.has(dep.definition.id)) continue;
       seen.add(dep.definition.id);
       if (!isEnabled(dep.definition)) {
-        settings.set(`${ENABLED_KEY_PREFIX}${dep.definition.id}`, true);
+        writeEnabled(dep.definition, true);
+        // A dependency enabled at runtime must get its patches too — the
+        // boot-time pass already ran for plugins enabled back then.
+        registerPatches(dep);
       }
       enableDependencies(dep, seen);
     }
@@ -133,19 +158,6 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
     const { definition } = record;
     record.state = "starting";
     try {
-      // Attribution by name (validated unique at registration) so notices
-      // read like upstream's. Patches land before start(): even if start
-      // fails, the module changes the plugin declared are in effect and are
-      // removed again when the plugin is disabled.
-      //
-      // Clearing first keeps a retry after a failed start idempotent —
-      // re-enabling a still-registered patch set must not double-register.
-      registry.removeByPlugin(definition.name);
-      const patches = (definition.patches ?? []).map((patch) => ({
-        ...patch,
-        plugin: definition.name,
-      }));
-      if (patches.length > 0) registry.add(...patches);
       await definition.start?.(record.context);
       record.state = "started";
       record.error = undefined;
@@ -155,6 +167,22 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
       logger.error(`plugin ${definition.name} failed to start`, error);
     }
     notify();
+  };
+
+  /**
+   * (Re)register a plugin's patches. Clearing first keeps a retry after a
+   * failed start idempotent — re-enabling a still-registered patch set must
+   * not double-register. Attribution by name (validated unique at
+   * registration) so notices read like upstream's.
+   */
+  const registerPatches = (record: PluginRecord): void => {
+    const { definition } = record;
+    registry.removeByPlugin(definition.name);
+    const patches = (definition.patches ?? []).map((patch) => ({
+      ...patch,
+      plugin: definition.name,
+    }));
+    if (patches.length > 0) registry.add(...patches);
   };
 
   const stopPlugin = async (record: PluginRecord): Promise<void> => {
@@ -216,6 +244,7 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
       // not evaluated yet, the same rule upstream follows.
       if (booted && isEnabled(definition)) {
         enableDependencies(record);
+        registerPatches(record);
         void startWithDependencies(record, new Set());
       }
     },
@@ -223,13 +252,47 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
     async boot() {
       if (booted) return;
       booted = true;
-      // Dependencies first: resolve the full enablement graph before any
-      // start so patch registration order follows it (APIs before users).
+
+      // Resolve the enablement graph first: enabling a plugin also enables
+      // its dependencies, which may not have been enabled before.
       for (const record of records.values()) {
         if (isEnabled(record.definition)) enableDependencies(record);
       }
-      for (const record of records.values()) {
-        if (isEnabled(record.definition)) await startWithDependencies(record, new Set());
+      const enabled = [...records.values()].filter((record) => isEnabled(record.definition));
+
+      // Dependency-first registration order (upstream starts APIs before
+      // their users; patches follow the same graph).
+      const ordered: PluginRecord[] = [];
+      const seen = new Set<string>();
+      const visit = (record: PluginRecord): void => {
+        if (seen.has(record.definition.id)) return;
+        seen.add(record.definition.id);
+        for (const depName of record.definition.dependencies ?? []) {
+          const dep = recordsByName.get(depName);
+          if (dep && isEnabled(dep.definition)) visit(dep);
+        }
+        ordered.push(record);
+      };
+      for (const record of enabled) visit(record);
+
+      // Phase 1 (synchronous): every enabled plugin's patches register
+      // before anything can await. Feature registration may wait for a
+      // stage (webpack-ready), but Discord's first script must already see
+      // the full patch set.
+      for (const record of ordered) registerPatches(record);
+
+      // Phase 2: starts grouped by stage so an init plugin listed after a
+      // webpack-ready one is not delayed by it — upstream processes each
+      // stage as a separate pass as well.
+      for (const stage of ["init", "webpack-ready", "dom-ready"] as const) {
+        if (stage !== "init") await stageWaiter(stage);
+        for (const record of ordered) {
+          if ((record.definition.startAt ?? "init") !== stage) continue;
+          // Re-check: a stage waiter yields, and the user may have
+          // disabled the plugin in the meantime.
+          if (!isEnabled(record.definition)) continue;
+          await startWithDependencies(record, new Set());
+        }
       }
     },
 
@@ -240,12 +303,22 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
         logger.warn(`plugin ${record.definition.name} is required and cannot be disabled`);
         return;
       }
-      settings.set(`${ENABLED_KEY_PREFIX}${id}`, enabled);
+      // Only write when the value actually changes: a foreign settings
+      // store notifies its listeners synchronously, and re-writing the same
+      // value from inside that listener would recurse forever. The state
+      // checks below make a re-entrant call a no-op instead of a double
+      // start/stop.
+      if (isEnabled(record.definition) !== enabled) writeEnabled(record.definition, enabled);
       if (!booted) return;
       if (enabled) {
+        if (record.state === "started" || record.state === "starting") return;
         enableDependencies(record);
+        registerPatches(record);
         await startWithDependencies(record, new Set());
-      } else await stopPlugin(record);
+      } else {
+        if (record.state === "stopped" || record.state === "stopping") return;
+        await stopPlugin(record);
+      }
     },
 
     list() {

@@ -124,6 +124,29 @@ export interface IonPlugin {
    * modules. Already-evaluated modules are never affected by late patches.
    */
   readonly patches?: readonly IonPluginPatch[];
+  /**
+   * When `start()` runs relative to Discord's boot:
+   * - `undefined` (default): as soon as the host boots — for Ion's own
+   *   plugins and upstream `Init` plugins, still before any Discord script,
+   * - `webpack-ready`: after webpack discovery succeeded (`onceReady`),
+   *   for upstream plugins defaulting to `WebpackReady`,
+   * - `dom-ready`: after the document finished parsing.
+   *
+   * Patches register regardless of the stage, at boot, before Discord
+   * evaluates anything — only feature registration waits for the stage.
+   */
+  readonly startAt?: "init" | "webpack-ready" | "dom-ready";
+  /**
+   * Persisted enablement owned by a foreign plugin format's own settings
+   * store (Vencord keeps `Settings.plugins.<name>.enabled`). When present,
+   * the host reads and writes enablement through this seam instead of its
+   * own store, so the adapter's UI and the host never disagree. `read()`
+   * returning undefined falls back to `defaultEnabled`.
+   */
+  readonly enabledState?: {
+    read(): boolean | undefined;
+    write(enabled: boolean): void;
+  };
   readonly start?: (context: IonPluginContext) => void | Promise<void>;
   readonly stop?: (context: IonPluginContext) => void | Promise<void>;
 }

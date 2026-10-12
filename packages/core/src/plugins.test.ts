@@ -48,6 +48,23 @@ async function fixture(initialSettings?: Record<string, unknown>): Promise<Fixtu
   return { host: createPluginHost({ registry, settings }), registry, settings };
 }
 
+/** Fixture whose `webpack-ready` stage resolves only when the test says so. */
+async function gatedFixture(): Promise<Fixture & { readonly releaseWebpackReady: () => void }> {
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const settings = createSettingsStore(fakeFiles(undefined));
+  await settings.load();
+  const registry = new PatchRegistry();
+  const host = createPluginHost({
+    registry,
+    settings,
+    stages: { "webpack-ready": () => ready },
+  });
+  return { host, registry, settings, releaseWebpackReady: release };
+}
+
 function plugin(id: string, extra: Partial<IonPlugin> = {}): IonPlugin {
   return { id, name: id, description: `${id} test plugin`, ...extra };
 }
@@ -398,6 +415,147 @@ describe("required plugins", () => {
     // The persisted flag is untouched: required is force-enabled, not a toggle.
     expect(settings.get("plugins.enabled.core", true)).toBe(false);
     expect(warn).toHaveBeenCalledWith("[ion] [plugins]", expect.stringContaining("required"));
+  });
+});
+
+describe("startAt stages", () => {
+  it("registers patches at boot but defers start() until the stage is ready", async () => {
+    const { host, registry, releaseWebpackReady } = await gatedFixture();
+    const start = vi.fn();
+    host.register(plugin("gated", { startAt: "webpack-ready", patches: [TEST_PATCH], start }));
+
+    const booting = host.boot();
+    await Promise.resolve();
+    // Phase 1 is synchronous: patches are live before any stage resolves,
+    // because Discord's first script must already see them.
+    expect(registry.size).toBe(1);
+    expect(start).not.toHaveBeenCalled();
+
+    releaseWebpackReady();
+    await booting;
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(host.list()[0]?.state).toBe("started");
+  });
+
+  it("processes stages in order regardless of registration order", async () => {
+    let resolveReady!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    const settings = createSettingsStore(fakeFiles(undefined));
+    await settings.load();
+    const registry = new PatchRegistry();
+    const host = createPluginHost({
+      registry,
+      settings,
+      stages: { "webpack-ready": () => ready },
+    });
+    const order: string[] = [];
+    host.register(plugin("later-init", { start: () => void order.push("init") }));
+    host.register(
+      plugin("gated", {
+        startAt: "webpack-ready",
+        start: () => void order.push("webpack-ready"),
+      }),
+    );
+
+    const booting = host.boot();
+    // The init pass runs synchronously inside boot(); the gated plugin's
+    // stage is still waiting.
+    expect(order).toEqual(["init"]);
+    resolveReady();
+    await booting;
+    expect(order).toEqual(["init", "webpack-ready"]);
+  });
+});
+
+describe("external enablement (enabledState)", () => {
+  function externalStore(): {
+    readonly values: Map<string, boolean>;
+    state(id: string): { read(): boolean | undefined; write(enabled: boolean): void };
+  } {
+    const values = new Map<string, boolean>();
+    return {
+      values,
+      state(id) {
+        return {
+          read: () => values.get(id),
+          write: (enabled) => {
+            values.set(id, enabled);
+          },
+        };
+      },
+    };
+  }
+
+  it("reads and writes enablement through the foreign store only", async () => {
+    const { host, settings } = await fixture();
+    const store = externalStore();
+    const start = vi.fn();
+    host.register(plugin("foreign", { enabledState: store.state("foreign"), start }));
+    await host.boot();
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(host.list()[0]?.enabled).toBe(true);
+    expect(store.values.has("foreign")).toBe(false);
+
+    await host.setEnabled("foreign", false);
+    expect(store.values.get("foreign")).toBe(false);
+    // The host's own store stays untouched: the foreign store is the
+    // single source of truth.
+    expect(settings.get("plugins.enabled.foreign", true)).toBe(true);
+    expect(host.list()[0]?.enabled).toBe(false);
+
+    await host.setEnabled("foreign", true);
+    expect(store.values.get("foreign")).toBe(true);
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  it("honors the foreign store's disabled state at boot", async () => {
+    const { host } = await fixture();
+    const store = externalStore();
+    store.values.set("off", false);
+    const start = vi.fn();
+    host.register(plugin("off", { enabledState: store.state("off"), start }));
+    await host.boot();
+    expect(start).not.toHaveBeenCalled();
+    expect(host.list()[0]?.enabled).toBe(false);
+  });
+
+  it("does not recurse when the foreign store notifies synchronously", async () => {
+    const { host } = await fixture();
+    const start = vi.fn();
+    const stop = vi.fn();
+    let enabled = true;
+    host.register(
+      plugin("sync", {
+        enabledState: {
+          read: () => enabled,
+          write: (value) => {
+            enabled = value;
+            // A store listener re-entering setEnabled, as compat does.
+            void host.setEnabled("sync", value);
+          },
+        },
+        start,
+        stop,
+      }),
+    );
+    await host.boot();
+    expect(start).toHaveBeenCalledTimes(1);
+
+    await host.setEnabled("sync", false);
+    expect(enabled).toBe(false);
+    await vi.waitFor(() => {
+      expect(stop).toHaveBeenCalledTimes(1);
+    });
+
+    await host.setEnabled("sync", true);
+    expect(enabled).toBe(true);
+    await vi.waitFor(() => {
+      expect(start).toHaveBeenCalledTimes(2);
+    });
+    expect(host.list()[0]?.state).toBe("started");
   });
 });
 

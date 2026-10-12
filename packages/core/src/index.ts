@@ -145,7 +145,25 @@ const discovery: IonDiscoveryApi = {
 state.discovery = discovery;
 
 const settings = createSettingsStore(window.ionShell?.files ?? UNAVAILABLE_FILES);
-const host = createPluginHost({ registry: getPatchRegistry(), settings });
+const host = createPluginHost({
+  registry: getPatchRegistry(),
+  settings,
+  stages: {
+    "webpack-ready": () => webpackReady,
+    "dom-ready": () =>
+      document.readyState === "loading"
+        ? new Promise<void>((resolve) => {
+            document.addEventListener(
+              "DOMContentLoaded",
+              () => {
+                resolve();
+              },
+              { once: true },
+            );
+          })
+        : Promise.resolve(),
+  },
+});
 state.plugins = host;
 state.patches = { stats: () => getPatchRegistry().stats() };
 
