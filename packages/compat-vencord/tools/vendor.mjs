@@ -23,6 +23,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -72,8 +73,10 @@ function resolveFile(base) {
     `${base}.desktop.tsx`,
     `${base}.vesktop.ts`,
     `${base}.vesktop.tsx`,
+    `${base}.d.ts`,
     join(base, "index.ts"),
     join(base, "index.tsx"),
+    join(base, "index.d.ts"),
   ];
   for (const candidate of candidates) {
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
@@ -98,7 +101,20 @@ function sha256(buffer) {
 }
 
 /** Mirror of upstream tsconfig's `paths` for the aliases we understand. */
-function resolveAlias(spec, srcRoot) {
+function resolveAlias(spec, srcRoot, upstreamRoot) {
+  // Upstream consumes its workspace package (a `link:` dependency), not the
+  // possibly-stale npm publish of it.
+  if (spec === "@vencord/discord-types") {
+    return join(upstreamRoot, "packages", "discord-types", "src", "index");
+  }
+  if (spec.startsWith("@vencord/discord-types/")) {
+    return join(
+      upstreamRoot,
+      "packages",
+      "discord-types",
+      spec.slice("@vencord/discord-types/".length),
+    );
+  }
   if (spec === "@webpack") return join(srcRoot, "webpack", "webpack");
   if (spec === "@webpack/patcher") return join(srcRoot, "webpack", "patchWebpack");
   if (spec === "@webpack/wreq.d") return join(srcRoot, "webpack", "wreq.d");
@@ -125,7 +141,7 @@ export function computeClosure(upstreamRoot, entryFiles) {
       if (spec.startsWith(".")) {
         target = resolveFile(resolve(dirname(file), spec));
       } else if (spec.startsWith("@") || spec.startsWith("~")) {
-        const aliased = resolveAlias(spec, srcRoot);
+        const aliased = resolveAlias(spec, srcRoot, upstreamRoot);
         if (aliased === null) {
           if (VIRTUAL.has(spec)) virtuals.add(spec);
           else externals.add(spec);
@@ -154,6 +170,43 @@ export function computeClosure(upstreamRoot, entryFiles) {
   return { files, externals, virtuals, shims, unresolved };
 }
 
+/**
+ * Upstream files the adapter's own sources import: every `@x`/`~x`
+ * specifier in src/*.ts resolves through the same alias table, so the
+ * shims' dependencies (Logger, patches, …) and the barrels re-exported on
+ * `window.Vencord` (components, utils) are part of the closure too.
+ * Adapter-relative imports are skipped — they are our code, not upstream's.
+ */
+function adapterRoots(adapterSrc, srcRoot, upstreamRoot) {
+  const roots = [];
+  const scan = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        scan(full);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts") || entry.name.endsWith(".d.ts")) continue;
+      for (const spec of importSpecifiers(readFileSync(full, "utf8"))) {
+        if (!spec.startsWith("@") && !spec.startsWith("~")) continue;
+        if (VIRTUAL.has(spec)) continue;
+        const aliased = resolveAlias(spec, srcRoot, upstreamRoot);
+        if (aliased === null) continue; // npm packages, e.g. @intrnl/*
+        const file = resolveFile(aliased);
+        if (!file) {
+          process.stderr.write(
+            `adapter import does not resolve upstream: ${spec} (from ${full})\n`,
+          );
+          process.exit(1);
+        }
+        roots.push(file);
+      }
+    }
+  };
+  scan(adapterSrc);
+  return roots;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const check = args.includes("--check");
@@ -176,6 +229,7 @@ function main() {
     }
     entryFiles.push(file);
   }
+  entryFiles.push(...adapterRoots(join(packageRoot, "src"), srcRoot, upstream));
 
   const closure = computeClosure(upstream, entryFiles);
   if (closure.unresolved.size > 0) {
@@ -187,11 +241,12 @@ function main() {
   const remote = execSync("git remote get-url origin", { cwd: upstream, encoding: "utf8" })
     .trim()
     .replace(/\.git$/, "");
+  const version = JSON.parse(readFileSync(join(upstream, "package.json"), "utf8")).version;
   const vendorRoot = join(packageRoot, "vendor", "vencord");
 
   const manifest = {
-    source: { repository: remote, commit, license: "GPL-3.0-or-later" },
-    note: "Verbatim copy of the upstream import closure of acceptance.json; see THIRD_PARTY.md.",
+    source: { repository: remote, commit, version, license: "GPL-3.0-or-later" },
+    note: "Verbatim copy of the upstream import closure of acceptance.json plus the adapter's own imports; see THIRD_PARTY.md.",
     shims: Object.fromEntries([...closure.shims].sort().map((file) => [file, SHIMS[file]])),
     virtuals: [...closure.virtuals].sort(),
     externals: [...closure.externals].sort(),
@@ -212,6 +267,12 @@ function main() {
     const failures = [];
     if (existing.source.commit !== commit) {
       failures.push(`upstream commit drifted: manifest ${existing.source.commit}, clone ${commit}`);
+    }
+    const version = JSON.parse(readFileSync(join(upstream, "package.json"), "utf8")).version;
+    if (existing.source.version !== version) {
+      failures.push(
+        `upstream version drifted: manifest ${existing.source.version}, clone ${version}`,
+      );
     }
     for (const [rel, expected] of Object.entries(existing.files)) {
       const path = join(vendorRoot, rel);
