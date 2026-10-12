@@ -1,0 +1,60 @@
+name: Vencord plugin artifacts
+
+# Cloud compilation for the Ion Index (AGENTS.md): verify the committed
+# vendor tree against upstream, build the adapter plus one compiled artifact
+# per acceptance plugin, and publish them as release assets on an
+# `ion-index/vencord/<version>` tag — the shape the catalog downloads.
+#
+# Artifacts are byte-reproducible (BUILD_TIMESTAMP pinned in build.mjs), so
+# index.json's sha256 column is stable across rebuilds of the same sources.
+#
+# Written during phase 6 but never executed in the authoring environment —
+# it can only run on GitHub. See docs/status.md.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/compat-vencord/**"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Official actions only; version comes from the packageManager field.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Verify the vendored tree against upstream
+        run: |
+          commit=$(node -p "require('./packages/compat-vencord/vendor/vencord/MANIFEST.json').source.commit")
+          git clone --filter=blob:none https://github.com/Vendicated/Vencord /tmp/upstream-vencord
+          git -C /tmp/upstream-vencord checkout --detach "$commit"
+          node packages/compat-vencord/tools/vendor.mjs /tmp/upstream-vencord --check
+      - name: Build bundle and artifacts
+        run: pnpm --filter @ion/compat-vencord build
+      - name: Publish artifacts to the Ion Index tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./packages/compat-vencord/vendor/vencord/MANIFEST.json').source.version")
+          tag="ion-index/vencord/$version"
+          assets=(packages/compat-vencord/dist/artifacts/*)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" \
+              --title "Ion Index: Vencord $version plugins" \
+              --notes "Compiled from Vencord $version. Hashes are in the index.json asset; source commit: $(git rev-parse HEAD)."
+          fi
