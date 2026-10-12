@@ -26,7 +26,8 @@
  * describe what was actually bundled.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
@@ -208,6 +209,207 @@ const cssPlugin = {
   },
 };
 
+/**
+ * The api barrel's source — external artifact stubs read their export keys
+ * from it so a vendor refresh that reshapes `@api` fails at build time.
+ */
+const apiIndexSource = readFileSync(join(vendorSrc, "api", "index.ts"), "utf8");
+
+/** Every key `@api` is exported under (`MessageEvents`, `PluginManager`, ...). */
+function apiBarrelKeys() {
+  const keys = new Set();
+  for (const match of apiIndexSource.matchAll(/export\s+\*\s+as\s+(\w+)\s+from/g)) {
+    keys.add(match[1]);
+  }
+  for (const match of apiIndexSource.matchAll(/export\s+const\s+(\w+)\s*=\s*\$\w+/g)) {
+    keys.add(match[1]);
+  }
+  return [...keys];
+}
+
+/** The barrel key one api module is exposed under (`MessageEvents` → `MessageEvents`), or null. */
+function apiBarrelKey(subpath) {
+  const star = apiIndexSource.match(
+    new RegExp(`export\\s+\\*\\s+as\\s+(\\w+)\\s+from\\s+"\\./${subpath}"`),
+  );
+  if (star) return star[1];
+  const alias = apiIndexSource.match(
+    new RegExp(`import\\s+\\*\\s+as\\s+\\$(\\w+)\\s+from\\s+"\\./${subpath}"`),
+  )?.[1];
+  if (alias === undefined) return null;
+  return (
+    apiIndexSource.match(new RegExp(`export\\s+const\\s+(\\w+)\\s*=\\s*\\$${alias}\\b`))?.[1] ??
+    null
+  );
+}
+
+/**
+ * Runtime export names of a vendored api module. Stubs must declare names
+ * statically (the artifact does `import { x } from "@api/..."`), so a name
+ * these passes miss fails the esbuild build — never a silent undefined at
+ * runtime. Type-only exports are intentionally excluded (`export type`,
+ * `export interface`, `export { type X }`); `export * from` chains are
+ * followed because their names land in the same namespace.
+ */
+function runtimeExportNames(file, visited = new Set()) {
+  if (visited.has(file)) return [];
+  visited.add(file);
+  const source = readFileSync(file, "utf8");
+  const names = new Set();
+  for (const match of source.matchAll(
+    /export\s+(?:declare\s+)?(?:async\s+)?(?:function\*?|const(?:\s+enum)?|let|var|class|enum)\s+([A-Za-z_$][\w$]*)/g,
+  )) {
+    names.add(match[1]);
+  }
+  for (const match of source.matchAll(/export\s*\{([^}]*)\}/g)) {
+    for (const spec of match[1].split(",")) {
+      const name = spec
+        .trim()
+        .split(/\s+as\s+/)
+        .pop()
+        ?.trim();
+      if (name !== undefined && /^[A-Za-z_$][\w$]*$/.test(name)) names.add(name);
+    }
+  }
+  for (const match of source.matchAll(/export\s+\*\s+from\s+"([^"]+)"/g)) {
+    const target = followStarExport(file, match[1]);
+    if (target !== null) {
+      for (const name of runtimeExportNames(target, visited)) names.add(name);
+    }
+  }
+  return [...names];
+}
+
+/** Where one `export * from` specifier points, or null when unresolvable. */
+function followStarExport(fromFile, specifier) {
+  if (specifier.startsWith(".")) return probe(resolve(dirname(fromFile), specifier));
+  if (specifier === "@vencord/discord-types") {
+    return probe(join(vendorRoot, "packages", "discord-types", "index"));
+  }
+  if (specifier.startsWith("@vencord/discord-types/")) {
+    return probe(
+      join(
+        vendorRoot,
+        "packages",
+        "discord-types",
+        specifier.slice("@vencord/discord-types/".length),
+      ),
+    );
+  }
+  return null;
+}
+
+/** The `@api` stub for one specifier, or null when it cannot be mapped. */
+function apiExternalTarget(specifier) {
+  if (specifier === "@api" || specifier === "@api/index") {
+    return { keyParts: [], file: join(vendorSrc, "api", "index.ts") };
+  }
+  const segments = specifier.slice("@api/".length).split("/");
+  if (segments.length > 2) return null; // deeper chains: no real case yet — inline
+  const top = probe(join(vendorSrc, "api", segments[0]));
+  if (top === null) return null;
+  const key = apiBarrelKey(segments[0]);
+  if (key === null) return null;
+  if (segments.length === 1) return { keyParts: [key], file: top };
+
+  // `@api/Scope/nested`: only external when the scope's own index exposes
+  // the nested file — either as a namespace (`export * as nested`) or
+  // flattened (`export * from`). When neither holds (the barrel simply
+  // never re-exports it, e.g. SettingsSync has no index at all), returning
+  // null falls back to inlining: the module's state is not shared with the
+  // runtime, but it is not reachable through the runtime either.
+  const scopeIndex = probe(join(vendorSrc, "api", segments[0], "index"));
+  if (scopeIndex === null) return null;
+  const nestedFile = probe(join(vendorSrc, "api", segments[0], segments[1]));
+  if (nestedFile === null) return null;
+  const indexSource = readFileSync(scopeIndex, "utf8");
+  const nested = segments[1];
+  const asNamespace =
+    new RegExp(`export\\s+\\*\\s+as\\s+${nested}\\s+from\\s+"\\./${nested}"`).test(indexSource) ||
+    namespaceConstExport(indexSource, nested) !== null;
+  if (asNamespace) return { keyParts: [key, nested], file: nestedFile };
+  const flattened = new RegExp(`export\\s+\\*\\s+from\\s+"\\./${nested}"`).test(indexSource);
+  if (flattened) return { keyParts: [key], file: nestedFile };
+  return null;
+}
+
+/** `import * as $X from "./nested"` + `export const nested = $X`, or null. */
+function namespaceConstExport(indexSource, nested) {
+  const alias = indexSource.match(
+    new RegExp(`import\\s+\\*\\s+as\\s+\\$(\\w+)\\s+from\\s+"\\./${nested}"`),
+  )?.[1];
+  if (alias === undefined) return null;
+  return indexSource.match(new RegExp(`export\\s+const\\s+${nested}\\s*=\\s*\\$${alias}\\b`));
+}
+
+/** The stub source for one `@api` specifier, or null when it must inline. */
+function apiStubModule(specifier) {
+  const target = apiExternalTarget(specifier);
+  if (target === null) return null;
+  const guard = [
+    `const Api = globalThis.Vencord.Api;`,
+    `if (!Api) throw new Error("[ion] compat-vencord runtime missing: window.Vencord.Api");`,
+  ].join("\n");
+  const names = target.keyParts.length === 0 ? apiBarrelKeys() : runtimeExportNames(target.file);
+  const modExpr =
+    target.keyParts.length === 0
+      ? "Api"
+      : target.keyParts.reduce(
+          (expression, part) => `${expression}[${JSON.stringify(part)}]`,
+          "Api",
+        );
+  const destructure = names.length > 0 ? `export const { ${names.join(", ")} } = mod;\n` : "";
+  return `${guard}
+const mod = ${modExpr};
+if (!mod) throw new Error("[ion] compat-vencord runtime Api is missing ${specifier}");
+export default mod;
+${destructure}`;
+}
+
+/**
+ * Artifact-only resolution: the `@api` scope stays OUT of the bundle and
+ * reads the running compat-vencord runtime instead, and the entry hands the
+ * compiled definition to `window.__ION_VENCORD_PLUGIN__` for
+ * `Vencord.registerPluginDefinition`. Everything else (utils, components,
+ * webpack shims) inlines — the shims only wrap window.__ION__, so their
+ * copies still share core's state.
+ */
+const artifactPlugin = {
+  name: "ion-vencord-artifact",
+  setup: (pluginBuild) => {
+    pluginBuild.onResolve({ filter: /^@api(\/|$)/ }, (args) => {
+      // Deep imports the barrel never exposes resolve normally (inlined by
+      // aliasPlugin below) — only genuinely shared modules become stubs.
+      if (apiExternalTarget(args.path) === null) return null;
+      return { path: args.path, namespace: "ion-api-external" };
+    });
+    pluginBuild.onLoad({ filter: /.*/, namespace: "ion-api-external" }, (args) => {
+      const contents = apiStubModule(args.path);
+      if (contents === null) {
+        return {
+          errors: [
+            {
+              text: `cannot externalize ${args.path}: no vendored api module or barrel key — update scripts/build.mjs after a vendor refresh`,
+            },
+          ],
+        };
+      }
+      return { loader: "js", contents };
+    });
+    pluginBuild.onResolve({ filter: /^ion-artifact:/ }, (args) => ({
+      path: args.path,
+      namespace: "ion-artifact-entry",
+    }));
+    pluginBuild.onLoad({ filter: /.*/, namespace: "ion-artifact-entry" }, (args) => {
+      const folder = args.path.slice("ion-artifact:".length);
+      return {
+        loader: "js",
+        contents: `import def from "@plugins/${folder}";\nglobalThis.__ION_VENCORD_PLUGIN__ = def;\n`,
+      };
+    });
+  },
+};
+
 const banner = `/*
  * Ion compat-vencord bundle — https://github.com/Wester4253/Ion
  *
@@ -218,47 +420,124 @@ const banner = `/*
  * @webpack/patcher are Ion shims as recorded there. See THIRD_PARTY.md.
  */`;
 
-const options = {
+const define = {
+  // Upstream's build flags for the vesktop renderer target.
+  IS_VESKTOP: "true",
+  IS_DISCORD_DESKTOP: "false",
+  IS_WEB: "false",
+  IS_EXTENSION: "false",
+  IS_USERSCRIPT: "false",
+  IS_DEV: "false",
+  IS_REPORTER: "false",
+  IS_ANTI_CRASH_TEST: "false",
+  IS_STANDALONE: "true",
+  IS_UPDATER_DISABLED: "true",
+  VERSION: JSON.stringify(manifest.source.version),
+  BUILD_TIMESTAMP: JSON.stringify(Date.now()),
+};
+
+const sharedOptions = {
   absWorkingDir: packageDir,
   // The package tsconfig enables verbatimModuleSyntax (our own sources use
   // `import type` diligently); the vendored upstream sources predate it and
   // import types through value syntax, which esbuild must still erase.
   tsconfig: join(packageDir, "tsconfig.build.json"),
-  entryPoints: [join(packageDir, "src", "index.ts")],
-  outfile: join(packageDir, "dist", "index.js"),
   bundle: true,
   format: "iife",
-  globalName: "Vencord",
   platform: "browser",
   target: "es2023",
-  // Inline: the shell evaluates the bundle as injected script text, where a
-  // relative sourceMappingURL would resolve against the page, not the file.
-  sourcemap: "inline",
   legalComments: "inline",
-  banner: { js: banner },
-  footer: { js: "//# sourceURL=ion://compat-vencord/index.js" },
   jsx: "transform",
   jsxFactory: "VencordCreateElement",
   jsxFragment: "VencordFragment",
   inject: [join(shimsDir, "reactInject.ts")],
-  define: {
-    // Upstream's build flags for the vesktop renderer target.
-    IS_VESKTOP: "true",
-    IS_DISCORD_DESKTOP: "false",
-    IS_WEB: "false",
-    IS_EXTENSION: "false",
-    IS_USERSCRIPT: "false",
-    IS_DEV: "false",
-    IS_REPORTER: "false",
-    IS_ANTI_CRASH_TEST: "false",
-    IS_STANDALONE: "true",
-    IS_UPDATER_DISABLED: "true",
-    VERSION: JSON.stringify(manifest.source.version),
-    BUILD_TIMESTAMP: JSON.stringify(Date.now()),
-  },
-  plugins: [aliasPlugin, virtualPlugin, cssPlugin],
+  define,
   logLevel: "warning",
 };
+
+const options = {
+  ...sharedOptions,
+  entryPoints: [join(packageDir, "src", "index.ts")],
+  outfile: join(packageDir, "dist", "index.js"),
+  globalName: "Vencord",
+  // Inline: the shell evaluates the bundle as injected script text, where a
+  // relative sourceMappingURL would resolve against the page, not the file.
+  sourcemap: "inline",
+  banner: { js: banner },
+  footer: { js: "//# sourceURL=ion://compat-vencord/index.js" },
+  plugins: [aliasPlugin, virtualPlugin, cssPlugin],
+};
+
+const artifactsDir = join(packageDir, "dist", "artifacts");
+
+function artifactBanner(entry) {
+  return `/*
+ * Ion Index compiled Vencord plugin — https://github.com/Wester4253/Ion
+ *
+ * ${entry.name} (vendor/vencord/src/plugins/${entry.folder})
+ * Compiled from Vencord ${manifest.source.version} (${manifest.source.commit}),
+ * Copyright (c) Vendicated and contributors, GPL-3.0-or-later.
+ * Loads against a running compat-vencord runtime (window.Vencord.Api);
+ * hashes and provenance: dist/artifacts/index.json. See THIRD_PARTY.md.
+ */`;
+}
+
+function artifactOptions(entry) {
+  const slug = entry.folder.replace(/\//g, "__");
+  return {
+    ...sharedOptions,
+    entryPoints: [`ion-artifact:${entry.folder}`],
+    outfile: join(artifactsDir, `${slug}.js`),
+    // No map: artifacts are downloaded files, and the Ion Index verifies
+    // them by hash — see BUILD_TIMESTAMP below.
+    sourcemap: false,
+    banner: { js: artifactBanner(entry) },
+    footer: { js: `//# sourceURL=ion://index/vencord/${slug}.js` },
+    // Pinned so repeated builds of unchanged sources hash identically.
+    define: { ...define, BUILD_TIMESTAMP: JSON.stringify("0") },
+    plugins: [artifactPlugin, aliasPlugin, virtualPlugin, cssPlugin],
+  };
+}
+
+/**
+ * Compile one self-contained artifact per acceptance plugin for the Ion
+ * Index (cloud compilation per AGENTS.md: CI runs this build and publishes
+ * the results; the app downloads a file and calls
+ * `Vencord.registerPluginDefinition(window.__ION_VENCORD_PLUGIN__)`).
+ * Skipped in watch mode — it is a publishing step, not a dev loop.
+ */
+async function buildArtifacts() {
+  mkdirSync(artifactsDir, { recursive: true });
+  const published = [];
+  for (const entry of acceptance) {
+    const artifact = artifactOptions(entry);
+    await build(artifact);
+    const bytes = readFileSync(artifact.outfile);
+    published.push({
+      name: entry.name,
+      group: entry.group,
+      folder: entry.folder,
+      file: `${entry.folder.replace(/\//g, "__")}.js`,
+      bytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      ...(entry.note === undefined ? {} : { note: entry.note }),
+    });
+  }
+  const index = {
+    format: "ion-index/vencord-artifacts/v1",
+    upstream: {
+      repository: manifest.source.repository,
+      commit: manifest.source.commit,
+      version: manifest.source.version,
+    },
+    generatedAt: new Date().toISOString(),
+    plugins: published,
+  };
+  writeFileSync(join(artifactsDir, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
+  process.stdout.write(
+    `[@ion/compat-vencord] ${published.length} artifacts → dist/artifacts (index.json)\n`,
+  );
+}
 
 if (watch) {
   const ctx = await context(options);
@@ -266,4 +545,5 @@ if (watch) {
   process.stdout.write("[@ion/compat-vencord] watching dist/index.js\n");
 } else {
   await build(options);
+  await buildArtifacts();
 }
