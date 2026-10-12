@@ -13,6 +13,21 @@ import { join } from "node:path";
 
 const SETTLE_DELAY_MS = 25_000;
 
+/**
+ * Console errors that occur by design in a healthy run, each with the
+ * reason it is expected. Everything else lands in `rendererErrors` and
+ * fails the run — this list must stay tiny and reviewable.
+ */
+const EXPECTED_ERRORS: readonly { readonly match: RegExp; readonly reason: string }[] = [
+  {
+    // The vendored NoTrack plugin disables Sentry by throwing inside its
+    // WebpackInstance evaluation (vendor/vencord/src/plugins/_core/
+    // noTrack.ts); upstream installs print the same error on every load.
+    match: /Sentry successfully disabled/,
+    reason: "NoTrack deliberately aborts Sentry's module evaluation",
+  },
+];
+
 export function parseSmokeArg(argv: readonly string[]): string | null {
   const arg = argv.find((entry) => entry.startsWith("--ion-smoke"));
   if (!arg) return null;
@@ -28,9 +43,18 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
   const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
   // Renderer errors (including uncaught exceptions) go into the report.
+  // Console errors that are by design of the bundled software are counted
+  // separately — this list stays tiny and every entry carries its reason.
   const rendererErrors: string[] = [];
+  const expectedErrors = new Map<string, number>();
   win.webContents.on("console-message", (details) => {
-    if (details.level === "error") rendererErrors.push(details.message);
+    if (details.level !== "error") return;
+    const expected = EXPECTED_ERRORS.find((entry) => entry.match.test(details.message));
+    if (expected) {
+      expectedErrors.set(expected.reason, (expectedErrors.get(expected.reason) ?? 0) + 1);
+      return;
+    }
+    rendererErrors.push(details.message);
   });
 
   /**
@@ -138,6 +162,7 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
     }
     report["ionPanelTimeline"] = ionPanelTimeline;
     report["rendererErrors"] = rendererErrors.slice(0, 20);
+    report["expectedErrors"] = Object.fromEntries(expectedErrors);
     const image = await contents.capturePage().catch(() => null);
     if (image && !image.isEmpty()) {
       writeFileSync(join(outputDir, "screenshot.png"), image.toPNG());
