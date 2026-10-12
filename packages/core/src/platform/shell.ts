@@ -107,6 +107,17 @@ export interface IonPlugin {
   /** Enabled unless the user disabled it; defaults to true. */
   readonly defaultEnabled?: boolean;
   /**
+   * Force-enabled and hidden from toggling (Vencord's `required`): core
+   * runtime plugins that other plugins assume present.
+   */
+  readonly required?: boolean;
+  /**
+   * Other plugins (by name) this one needs: starting an enabled plugin
+   * enables its dependencies first, exactly like upstream's dependency
+   * resolution. A missing dependency logs a warning and is skipped.
+   */
+  readonly dependencies?: readonly string[];
+  /**
    * Source patches, registered with the engine before Discord evaluates its
    * modules. Already-evaluated modules are never affected by late patches.
    */

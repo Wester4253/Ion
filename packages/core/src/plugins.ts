@@ -73,14 +73,59 @@ function describeError(error: unknown): string {
 export function createPluginHost(options: PluginHostOptions): PluginHost {
   const { registry, settings } = options;
   const records = new Map<string, PluginRecord>();
+  const recordsByName = new Map<string, PluginRecord>();
   const listeners = new Set<() => void>();
   let booted = false;
 
   const isEnabled = (definition: IonPlugin): boolean =>
+    // `required` overrides persisted state: core runtime plugins are
+    // force-enabled exactly like upstream, and cannot be toggled off.
+    definition.required === true ||
     settings.get(`${ENABLED_KEY_PREFIX}${definition.id}`, definition.defaultEnabled ?? true);
 
   const notify = (): void => {
     for (const listener of listeners) listener();
+  };
+
+  /**
+   * Persistently enable every dependency of `record` (Vencord's semantics:
+   * dependencies become enabled in settings, transitively, and a missing one
+   * warns instead of blocking). Cycles terminate via `seen`.
+   */
+  const enableDependencies = (record: PluginRecord, seen = new Set<string>()): void => {
+    for (const depName of record.definition.dependencies ?? []) {
+      const dep = recordsByName.get(depName);
+      if (!dep) {
+        logger.warn(
+          `plugin ${record.definition.name} has unresolved dependency ${JSON.stringify(depName)}`,
+        );
+        continue;
+      }
+      if (seen.has(dep.definition.id)) continue;
+      seen.add(dep.definition.id);
+      if (!isEnabled(dep.definition)) {
+        settings.set(`${ENABLED_KEY_PREFIX}${dep.definition.id}`, true);
+      }
+      enableDependencies(dep, seen);
+    }
+  };
+
+  /** Start `record` after its dependencies, recursively; cycles are skipped. */
+  const startWithDependencies = async (
+    record: PluginRecord,
+    resolving: Set<string>,
+  ): Promise<void> => {
+    if (resolving.has(record.definition.id)) {
+      logger.warn(`dependency cycle at plugin ${record.definition.name}`);
+      return;
+    }
+    resolving.add(record.definition.id);
+    for (const depName of record.definition.dependencies ?? []) {
+      const dep = recordsByName.get(depName);
+      if (dep && isEnabled(dep.definition)) await startWithDependencies(dep, resolving);
+    }
+    resolving.delete(record.definition.id);
+    await startPlugin(record);
   };
 
   const startPlugin = async (record: PluginRecord): Promise<void> => {
@@ -154,7 +199,7 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
           throw new Error(`plugin name already registered: ${definition.name}`);
         }
       }
-      records.set(definition.id, {
+      const record: PluginRecord = {
         definition,
         context: {
           settings: settings.namespace(`plugin.${definition.id}`),
@@ -162,32 +207,45 @@ export function createPluginHost(options: PluginHostOptions): PluginHost {
         },
         state: "stopped",
         error: undefined,
-      });
+      };
+      records.set(definition.id, record);
+      recordsByName.set(definition.name, record);
       notify();
       // A plugin registered after boot (adapters, external files) starts
       // immediately when enabled; its patches only affect modules that have
       // not evaluated yet, the same rule upstream follows.
       if (booted && isEnabled(definition)) {
-        const record = records.get(definition.id);
-        if (record) void startPlugin(record);
+        enableDependencies(record);
+        void startWithDependencies(record, new Set());
       }
     },
 
     async boot() {
       if (booted) return;
       booted = true;
+      // Dependencies first: resolve the full enablement graph before any
+      // start so patch registration order follows it (APIs before users).
       for (const record of records.values()) {
-        if (isEnabled(record.definition)) await startPlugin(record);
+        if (isEnabled(record.definition)) enableDependencies(record);
+      }
+      for (const record of records.values()) {
+        if (isEnabled(record.definition)) await startWithDependencies(record, new Set());
       }
     },
 
     async setEnabled(id, enabled) {
       const record = records.get(id);
       if (!record) throw new Error(`unknown plugin: ${id}`);
+      if (record.definition.required === true && !enabled) {
+        logger.warn(`plugin ${record.definition.name} is required and cannot be disabled`);
+        return;
+      }
       settings.set(`${ENABLED_KEY_PREFIX}${id}`, enabled);
       if (!booted) return;
-      if (enabled) await startPlugin(record);
-      else await stopPlugin(record);
+      if (enabled) {
+        enableDependencies(record);
+        await startWithDependencies(record, new Set());
+      } else await stopPlugin(record);
     },
 
     list() {

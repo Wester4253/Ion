@@ -320,6 +320,87 @@ describe("plugin context", () => {
   });
 });
 
+describe("plugin host dependencies", () => {
+  it("enables and starts dependencies before the dependent plugin", async () => {
+    const { host, settings } = await fixture();
+    const order: string[] = [];
+    host.register(plugin("api", { defaultEnabled: false, start: () => void order.push("api") }));
+    host.register(plugin("user", { dependencies: ["api"], start: () => void order.push("user") }));
+    await host.boot();
+
+    expect(order).toEqual(["api", "user"]);
+    // Upstream persists the dependency's enabled flag.
+    expect(settings.get("plugins.enabled.api", false)).toBe(true);
+  });
+
+  it("resolves dependencies transitively", async () => {
+    const { host } = await fixture();
+    const order: string[] = [];
+    host.register(plugin("deep", { defaultEnabled: false, start: () => void order.push("deep") }));
+    host.register(plugin("mid", { defaultEnabled: false, dependencies: ["deep"] }));
+    host.register(plugin("top", { dependencies: ["mid"], start: () => void order.push("top") }));
+    await host.boot();
+
+    expect(order).toEqual(["deep", "top"]);
+  });
+
+  it("warns and continues when a dependency is missing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { host } = await fixture();
+    const start = vi.fn();
+    host.register(plugin("needy", { dependencies: ["ghost"], start }));
+    await host.boot();
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "[ion] [plugins]",
+      expect.stringContaining('unresolved dependency "ghost"'),
+    );
+  });
+
+  it("survives a dependency cycle without hanging", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { host } = await fixture();
+    host.register(plugin("a", { dependencies: ["b"] }));
+    host.register(plugin("b", { dependencies: ["a"] }));
+    await host.boot();
+    expect(host.status().failed).toBe(0);
+  });
+
+  it("enables a dependency when the dependent is enabled at runtime", async () => {
+    const { host, settings } = await fixture({ "plugins.enabled.user": false });
+    host.register(plugin("api", { defaultEnabled: false }));
+    host.register(plugin("user", { dependencies: ["api"] }));
+    await host.boot();
+    expect(settings.get("plugins.enabled.api", false)).toBe(false);
+
+    await host.setEnabled("user", true);
+    expect(settings.get("plugins.enabled.api", false)).toBe(true);
+    await vi.waitFor(() => {
+      expect(host.list().find((info) => info.id === "api")?.state).toBe("started");
+    });
+  });
+});
+
+describe("required plugins", () => {
+  it("starts even when persisted disabled and cannot be toggled off", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { host, settings } = await fixture({ "plugins.enabled.core": false });
+    const start = vi.fn();
+    host.register(plugin("core", { required: true, start }));
+    await host.boot();
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(host.list()[0]?.enabled).toBe(true);
+
+    await host.setEnabled("core", false);
+    expect(host.list()[0]?.state).toBe("started");
+    // The persisted flag is untouched: required is force-enabled, not a toggle.
+    expect(settings.get("plugins.enabled.core", true)).toBe(false);
+    expect(warn).toHaveBeenCalledWith("[ion] [plugins]", expect.stringContaining("required"));
+  });
+});
+
 describe("plugin host reporting", () => {
   it("formats authors and exposes identity fields in list()", async () => {
     const { host } = await fixture();
