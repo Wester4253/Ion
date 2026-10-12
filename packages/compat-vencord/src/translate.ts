@@ -115,6 +115,10 @@ function collectDependencies(
 
   for (const [field, api] of IMPLICIT_DEPENDENCIES) {
     if (definition[field] == null) continue;
+    // Upstream collects needed API plugins into one global set, so an API
+    // plugin advertising its own feature (BadgeAPI ships a contributor badge)
+    // never becomes a self-edge. Edges here are start ordering, so skip it.
+    if (api === definition.name) continue;
     if (options.availablePlugins.has(api)) dependencies.add(api);
     else {
       logger.warn(
