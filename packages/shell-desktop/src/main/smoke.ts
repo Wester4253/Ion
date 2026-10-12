@@ -83,6 +83,9 @@ export function runSmoke(outputDir: string, win: BrowserWindow): void {
       coreInjected: await probe(
         "window.__ION__ !== undefined && typeof window.__ION__.version === 'string'",
       ),
+      discoveryReady: await probe(
+        "(() => { const d = window.__ION__?.discovery; return Boolean(d && typeof d.find === 'function' && typeof d.findByProps === 'function' && d.filters && d.onceReady instanceof Promise); })()",
+      ),
       debugPanelMounted: await probe(
         "document.getElementsByTagName('ion-debug-host').length === 1",
       ),

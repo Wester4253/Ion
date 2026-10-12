@@ -44,7 +44,7 @@ function parseArgs(argv) {
 }
 
 /** Probes that must be present and truthy for the run to count as green. */
-const REQUIRED_ALWAYS = ["ionShellPreload", "coreInjected", "debugPanelMounted"];
+const REQUIRED_ALWAYS = ["ionShellPreload", "coreInjected", "discoveryReady", "debugPanelMounted"];
 
 /** Extra probes only expected when the app is past the login screen. */
 const REQUIRED_IN_APP = ["ionTabMounted", "ionPanelActive"];

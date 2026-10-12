@@ -12,6 +12,8 @@
 import type { Logger } from "../logging";
 import type { Patch, PatchStatsApi } from "../patches";
 import type { PluginSettings } from "../settings";
+import type { CodeFilter, ModuleFilter } from "../webpack/filters";
+import type { ModuleFactory } from "../webpack/types";
 
 export type ShellKind = "desktop" | "android";
 
@@ -162,6 +164,56 @@ export interface IonUiApi {
   readonly ready: boolean;
 }
 
+/**
+ * The module-discovery surface, exposed as `window.__ION__.discovery`.
+ *
+ * Adapters (compat-vencord, compat-bd, ...) must not bundle core a second
+ * time — that would duplicate the patch registry and plugin host — so they
+ * import nothing at runtime and call these functions instead. Semantics are
+ * identical to the core exports of the same names.
+ */
+export interface IonDiscoveryApi {
+  /** First loaded module (or nested export) matching the filter. */
+  find(filter: ModuleFilter): unknown;
+  /** All loaded modules (and nested exports) matching the filter. */
+  findAll(filter: ModuleFilter): unknown[];
+  /** First module exposing all the given properties (logs a warning on miss). */
+  findByProps(...props: string[]): unknown;
+  /** First function whose source contains all fragments (logs on miss). */
+  findByCode(...code: CodeFilter): unknown;
+  /** Flux store by constructor displayName (logs a warning on miss). */
+  findStore(name: string): unknown;
+  /** Id of the first module factory containing all fragments, else null. */
+  findModuleId(...code: CodeFilter): string | null;
+  /** The first module factory containing all fragments, else null. */
+  findModuleFactory(...code: CodeFilter): ModuleFactory | null;
+  /** Search factory sources; returns every matching id → factory. */
+  search(...code: CodeFilter): Record<string, ModuleFactory>;
+  /** Call `listener` with the first matching module; returns unsubscribe. */
+  waitFor(
+    filter: string | readonly string[] | ModuleFilter,
+    listener: (exports: unknown, id: PropertyKey) => void,
+  ): () => void;
+  /** Lazy variants: evaluate on first access, retry, never log on miss. */
+  findLazy(filter: ModuleFilter): unknown;
+  findByPropsLazy(...props: string[]): unknown;
+  findByCodeLazy(...code: CodeFilter): unknown;
+  findStoreLazy(name: string): unknown;
+  /** Filters in Vencord's public shape (byProps/byCode/byStoreName). */
+  readonly filters: {
+    byProps(...props: string[]): ModuleFilter;
+    byCode(...code: CodeFilter): ModuleFilter;
+    byStoreName(name: string): ModuleFilter;
+  };
+  /** Evaluate `factory` on first property access and retry on failure. */
+  proxyLazy<T>(factory: () => T, attempts?: number): T;
+  /**
+   * Resolves once Discord's webpack runtime was captured and sample
+   * lookups succeeded — the adapter's stand-in for upstream's `onceReady`.
+   */
+  readonly onceReady: Promise<void>;
+}
+
 /** Injected by the core bundle as proof that it ran in the main world. */
 export interface IonGlobal {
   readonly version: string;
@@ -170,6 +222,8 @@ export interface IonGlobal {
   plugins?: IonPluginsApi;
   /** Per-plugin patch telemetry (applied/active/notices) for the harness. */
   patches?: PatchStatsApi;
+  /** Module discovery for adapters, which must not re-bundle the core. */
+  discovery?: IonDiscoveryApi;
   ui?: IonUiApi;
 }
 

@@ -12,13 +12,33 @@
 
 import { registerBundledPlugins } from "./bundledPlugins";
 import { mountDebugPanel, updatePluginStatus, updateWebpackStatus } from "./debugPanel";
+import { proxyLazy } from "./lazy";
 import { createPluginHost } from "./plugins";
-import type { IonGlobal, IonWebpackStatus, ShellFileApi } from "./platform/shell";
+import type { IonDiscoveryApi, IonGlobal, IonWebpackStatus, ShellFileApi } from "./platform/shell";
 import { createSettingsStore } from "./settings";
-import { getPatchRegistry, initWebpack, probeHealth } from "./webpack";
+import {
+  find,
+  findAll,
+  findByCode,
+  findByCodeLazy,
+  findByProps,
+  findByPropsLazy,
+  findLazy,
+  findModuleFactory,
+  findModuleId,
+  findStore,
+  findStoreLazy,
+  getPatchRegistry,
+  initWebpack,
+  probeHealth,
+  search,
+  waitFor,
+} from "./webpack";
+import { filters } from "./webpack/filters";
 
 export type {
   FileEncoding,
+  IonDiscoveryApi,
   IonGlobal,
   IonPlugin,
   IonPluginContext,
@@ -93,6 +113,37 @@ const state: IonGlobal = {
 
 window.__ION__ = state;
 
+/**
+ * Resolves on the first health snapshot where the webpack runtime was
+ * captured and sample lookups succeed — adapters await it before their
+ * eager (non-lazy) module lookups.
+ */
+let markWebpackReady!: () => void;
+const webpackReady = new Promise<void>((resolve) => {
+  markWebpackReady = resolve;
+});
+
+/** Discovery surface for adapters; see `IonDiscoveryApi`. */
+const discovery: IonDiscoveryApi = {
+  find: (filter) => find(filter),
+  findAll: (filter) => findAll(filter),
+  findByProps: (...props) => findByProps(...props),
+  findByCode: (...code) => findByCode(...code),
+  findStore: (name) => findStore(name),
+  findModuleId: (...code) => findModuleId(...code),
+  findModuleFactory: (...code) => findModuleFactory(...code),
+  search: (...code) => search(...code),
+  waitFor: (filter, listener) => waitFor(filter, listener),
+  findLazy: (filter) => findLazy(filter),
+  findByPropsLazy: (...props) => findByPropsLazy(...props),
+  findByCodeLazy: (...code) => findByCodeLazy(...code),
+  findStoreLazy: (name) => findStoreLazy(name),
+  filters,
+  proxyLazy,
+  onceReady: webpackReady,
+};
+state.discovery = discovery;
+
 const settings = createSettingsStore(window.ionShell?.files ?? UNAVAILABLE_FILES);
 const host = createPluginHost({ registry: getPatchRegistry(), settings });
 state.plugins = host;
@@ -131,9 +182,14 @@ function startHealthPoll(): void {
     updateWebpackStatus(status);
 
     const settled = status.ready && status.byProps && status.store;
-    if (!settled && ticks < HEALTH_POLL_LIMIT) {
-      window.setTimeout(tick, HEALTH_POLL_INTERVAL_MS);
+    // Settled or exhausted: either way the poll is done. `onceReady` must
+    // resolve even when discovery never succeeded, so awaiting adapters
+    // proceed (and report their own misses) instead of hanging forever.
+    if (settled || ticks >= HEALTH_POLL_LIMIT) {
+      markWebpackReady();
+      return;
     }
+    window.setTimeout(tick, HEALTH_POLL_INTERVAL_MS);
   };
 
   tick();
