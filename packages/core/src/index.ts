@@ -57,6 +57,7 @@ export type {
   ShellSettingsApi,
 } from "./platform/shell";
 
+export type { CacheEntry, ModuleFactory, WebpackRequire } from "./webpack/types";
 export { createPluginHost, type PluginHost } from "./plugins";
 export type { Patch, PatchNotice, PatchStatsApi, PluginPatchStats } from "./patches";
 export { createSettingsStore, type PluginSettings, type SettingsStore } from "./settings";

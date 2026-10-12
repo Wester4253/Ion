@@ -10,11 +10,13 @@
  */
 
 import { BoundLogger, Logger } from "./logger";
+import { Webpack } from "./webpack";
 
 /** The BetterDiscord release whose API surface this adapter implements. */
 const BD_VERSION = "1.14.2";
 
 const defaultLogger = new Logger();
+const webpackInstance = new Webpack();
 const boundLoggers = new Map<string, BoundLogger>();
 const instances = new Map<string, BdApi>();
 
@@ -36,6 +38,9 @@ export class BdApi {
 
   /** Unbound logger: every call carries the plugin name first. */
   static readonly Logger: Logger = defaultLogger;
+
+  /** Module search — shared instance, exactly as upstream (never name-bound). */
+  static readonly Webpack: Webpack = webpackInstance;
 
   readonly #scopedLogger: BoundLogger | null = null;
 
@@ -69,5 +74,10 @@ export class BdApi {
    */
   get Logger(): BoundLogger | Logger {
     return this.#scopedLogger ?? defaultLogger;
+  }
+
+  /** Module search — shared instance, exactly as upstream (never name-bound). */
+  get Webpack(): Webpack {
+    return webpackInstance;
   }
 }

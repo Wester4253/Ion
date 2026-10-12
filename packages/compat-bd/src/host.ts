@@ -1,0 +1,23 @@
+/**
+ * Access to the Ion host bundle from the BetterDiscord adapter.
+ *
+ * The shell evaluates core → ui → compat-vencord → compat-bd in one script
+ * injection, so `window.__ION__` (plugin host, module discovery, patch
+ * telemetry) is in place before this runs. Adapters must never bundle core
+ * a second time — that would duplicate the plugin host and patch registry —
+ * so every host capability is reached through this accessor instead of an
+ * import (the `@ion/core` dependency is types-only).
+ */
+
+import type { IonDiscoveryApi } from "@ion/core";
+
+function missing(detail: string): Error {
+  return new Error(`[ion] compat-bd requires the Ion core bundle (${detail} is missing)`);
+}
+
+/** Module discovery; throws when the core bundle did not run first. */
+export function discovery(): IonDiscoveryApi {
+  const api = window.__ION__?.discovery;
+  if (!api) throw missing("window.__ION__.discovery");
+  return api;
+}
