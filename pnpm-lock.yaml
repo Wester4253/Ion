@@ -51,7 +51,11 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(yaml@2.9.1)
 
-  packages/compat-bd: {}
+  packages/compat-bd:
+    dependencies:
+      '@ion/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/compat-harness: {}
 

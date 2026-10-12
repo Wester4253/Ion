@@ -2,24 +2,28 @@
   "name": "@ion/compat-bd",
   "version": "0.0.0",
   "private": true,
-  "description": "BetterDiscord adapter: BdApi surface and BD plugin/theme parsing.",
+  "description": "BetterDiscord adapter.",
   "license": "GPL-3.0-only",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "node ../../scripts/bundle.mjs",
+    "dev": "node ../../scripts/bundle.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ion/core": "workspace:*"
   },
   "ion": {
     "bundles": [
       {
         "entry": "src/index.ts",
         "outfile": "dist/index.js",
-        "platform": "browser"
+        "platform": "browser",
+        "format": "iife"
       }
     ]
-  },
-  "scripts": {
-    "build": "node ../../scripts/bundle.mjs",
-    "dev": "node ../../scripts/bundle.mjs --watch",
-    "typecheck": "tsc -p tsconfig.json"
   }
 }

@@ -4,9 +4,10 @@
  * In development the bundles live in the sibling workspace packages; the
  * loader takes the candidates and the reader as inputs so it stays pure and
  * unit-tested. Environment overrides (`ION_CORE_BUNDLE`, `ION_UI_BUNDLE`,
- * `ION_COMPAT_VENCORD_BUNDLE`) take priority over the sibling lookup. The
- * appended bundles are optional: the shell still runs without them (no
- * settings page, no Vencord adapter), but the core bundle is required.
+ * `ION_COMPAT_VENCORD_BUNDLE`, `ION_COMPAT_BD_BUNDLE`) take priority over
+ * the sibling lookup. The appended bundles are optional: the shell still
+ * runs without them (no settings page, no compat adapters), but the core
+ * bundle is required.
  *
  * Evaluation order is core → UI → compat adapters: adapters register their
  * translated plugins against the host core already set up.
@@ -32,6 +33,8 @@ export type CoreBundleResult =
       readonly ui: boolean;
       /** True when the Vencord adapter bundle was found and appended. */
       readonly compatVencord: boolean;
+      /** True when the BetterDiscord adapter bundle was found and appended. */
+      readonly compatBd: boolean;
     }
   | { readonly ok: false; readonly tried: readonly string[]; readonly reason: string };
 
@@ -63,6 +66,16 @@ export function compatVencordBundleCandidates(
   );
 }
 
+export function compatBdBundleCandidates(
+  envBundle: string | undefined,
+  shellDistDir: string,
+): string[] {
+  return candidatesFor(
+    envBundle,
+    resolve(shellDistDir, "..", "..", "compat-bd", "dist", "index.js"),
+  );
+}
+
 type FirstResult =
   | { readonly ok: true; readonly source: string; readonly file: string }
   | { readonly ok: false; readonly tried: readonly string[]; readonly reason: string };
@@ -91,9 +104,9 @@ function loadFirst(candidates: readonly string[], read: (file: string) => string
 
 /**
  * Load the core bundle (required) and append the optional bundles (UI, then
- * the Vencord adapter) so the shell evaluates everything in one script
- * injection. Missing optional bundles only narrow the feature set; the
- * loader reports which ones landed.
+ * the Vencord adapter, then the BetterDiscord adapter) so the shell
+ * evaluates everything in one script injection. Missing optional bundles
+ * only narrow the feature set; the loader reports which ones landed.
  */
 export function loadCoreBundle(
   envCoreBundle: string | undefined,
@@ -101,6 +114,7 @@ export function loadCoreBundle(
   shellDistDir: string,
   read: (file: string) => string,
   envCompatVencordBundle?: string,
+  envCompatBdBundle?: string,
 ): CoreBundleResult {
   const core = loadFirst(coreBundleCandidates(envCoreBundle, shellDistDir), read);
   if (!core.ok) return core;
@@ -114,6 +128,7 @@ export function loadCoreBundle(
       name: "compat-vencord",
       candidates: compatVencordBundleCandidates(envCompatVencordBundle, shellDistDir),
     },
+    { name: "compat-bd", candidates: compatBdBundleCandidates(envCompatBdBundle, shellDistDir) },
   ];
 
   const optional: OptionalBundle[] = [];
@@ -132,5 +147,6 @@ export function loadCoreBundle(
     optional,
     ui: loadedNames.has("ui"),
     compatVencord: loadedNames.has("compat-vencord"),
+    compatBd: loadedNames.has("compat-bd"),
   };
 }
