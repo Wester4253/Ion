@@ -99,6 +99,33 @@ Rules the host enforces, and the honest limits:
   mismatches against the default fall back to the default with a logged
   warning.
 
+## Plugin capability surface (what plugin code can reach)
+
+Plugins run in Discord's page main world with **no Node, no
+`ipcRenderer`** — `nodeIntegration` stays off and the shell never exposes
+its bridge to the page. Everything a plugin can use is one of:
+
+| Capability           | Surface                                                                               | Bounds                                                                                                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Discord's page       | DOM, `window`, Discord's own modules                                                  | Whatever the page already has. No token is ever read, logged, stored, or transmitted by Ion's APIs or shims.                                                                                                                                                                                   |
+| Module discovery     | `find`/`findByProps`/`findByCode`/`findStore`/`waitFor` + lazy variants (`@ion/core`) | Read-only lookups over Discord's webpack caches; misses log a warning and return null.                                                                                                                                                                                                         |
+| Source patches       | `patches` in the manifest, registered by the host before Discord evaluates            | Applied only to factories that have not run yet; attributed per plugin; failure is a notice, never a crash.                                                                                                                                                                                    |
+| Scoped settings      | `context.settings` (`get/set/delete/subscribe`)                                       | Persisted under `plugin.<id>.*` in Ion's data directory; JSON-serializable values only.                                                                                                                                                                                                        |
+| Scoped files         | `window.ionShell.files` — **only** through the restricted `require("fs")`             | Every path is confined to the Ion data directory; `..` and absolute paths are refused by the shell (double-checked over IPC).                                                                                                                                                                  |
+| Restricted `require` | `require(id)` for `fs`, `path`, `electron`, `events`, `timers`, `url`                 | Allowlist only — anything else throws. `electron` is a gated subset: `shell.openExternal` (URL allowlist enforced by the main process) and `ipcRenderer.sendSync/invoke/on` filtered to Ion's own channels twice (preload and main). No raw `ipcRenderer`, no `remote`, no arbitrary channels. |
+| External links       | `window.ionShell.openExternal(url)`                                                   | Scheme allowlist enforced by the main process.                                                                                                                                                                                                                                                 |
+
+This is deliberately the **BetterDiscord-level model** (per AGENTS.md): plugin
+computer access comes from a preload bridge allowlist, not from Electron's
+sandbox being disabled. Expanding this surface — new `require` modules, new
+IPC channels, broader file access — is a decision that needs owner sign-off,
+not an implementation detail.
+
+Honest framing for users: this boundary makes what a plugin _can_ reach
+narrow and reviewable; it does not make any specific plugin "safe". Ion shows
+source and provenance before install and never auto-updates plugins
+silently.
+
 ## Settings storage
 
 Everything persists to `settings/core.json` in the Ion data directory through

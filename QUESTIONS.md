@@ -19,6 +19,22 @@ on everything unblocked; only truly blocking items stop the run.
   3. (c) Something else you have in mind.
 - **Recommended default**: (a), matching the ecosystem priority order in
   AGENTS.md (Vencord first, then BetterDiscord, then Shelter).
+- **Proposed definitions (to be written into docs/status.md at the phase-6
+  boundary; I implement these unless you redirect me)**:
+  - **Phase 7 — BetterDiscord adapter.** `compat-bd` implements
+    `BdApi`-compatible surface (DOM/React/Utils/DataStore/ColorPicker/
+    Logger/Popover components) plus the BD plugin format (`meta` header
+    parsing, `start/stop` lifecycle) and BD theme format (CSS with
+    `/* @name */` headers) feeding Ion's theme engine. Verification: same
+    three-tier method, BD starter set proposed in QUESTIONS.md for your
+    approval before bulk work, top-100 BD plugins loaded through the
+    harness where obtainable.
+  - **Phase 8 — Shelter adapter + bulk scoreboard.** `compat-shelter`
+    translates Shelter's plugin/flux/store APIs into the core host;
+    plus the full `compat-harness` bulk run across all supported
+    ecosystems producing the generated `docs/compat.md` scoreboard
+    (Tier 1 + Tier 2 automated, Tier 3 listed for your pass), per
+    AGENTS.md's compatibility testing rule.
 - **Status**: writing proposed definitions in docs/status.md at the phase-6
   boundary; continuing with Phase 6 meanwhile.
 
