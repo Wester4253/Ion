@@ -1,40 +1,66 @@
 /**
- * Locating the Ion core and UI bundles.
+ * Locating the Ion core bundle and the optional bundles appended after it.
  *
- * In development the bundles live in the sibling `packages/core` and
- * `packages/ui` workspace packages; the loader takes the candidates and the
- * reader as inputs so it stays pure and unit-tested. `ION_CORE_BUNDLE` and
- * `ION_UI_BUNDLE` override the lookups. The UI bundle is optional: the shell
- * still runs without it (the settings page simply won't exist), but the core
- * bundle is required.
+ * In development the bundles live in the sibling workspace packages; the
+ * loader takes the candidates and the reader as inputs so it stays pure and
+ * unit-tested. Environment overrides (`ION_CORE_BUNDLE`, `ION_UI_BUNDLE`,
+ * `ION_COMPAT_VENCORD_BUNDLE`) take priority over the sibling lookup. The
+ * appended bundles are optional: the shell still runs without them (no
+ * settings page, no Vencord adapter), but the core bundle is required.
+ *
+ * Evaluation order is core → UI → compat adapters: adapters register their
+ * translated plugins against the host core already set up.
  */
 
 import { resolve } from "node:path";
+
+/** An optional bundle appended after the core bundle. */
+export interface OptionalBundle {
+  readonly name: string;
+  readonly candidates: readonly string[];
+  /** True when the bundle was found and appended. */
+  readonly loaded: boolean;
+}
 
 export type CoreBundleResult =
   | {
       readonly ok: true;
       readonly source: string;
       readonly file: string;
+      readonly optional: readonly OptionalBundle[];
       /** True when the settings-UI bundle was found and appended. */
       readonly ui: boolean;
+      /** True when the Vencord adapter bundle was found and appended. */
+      readonly compatVencord: boolean;
     }
   | { readonly ok: false; readonly tried: readonly string[]; readonly reason: string };
+
+function candidatesFor(envBundle: string | undefined, devSibling: string): string[] {
+  return envBundle ? [envBundle, devSibling] : [devSibling];
+}
 
 export function coreBundleCandidates(
   envBundle: string | undefined,
   shellDistDir: string,
 ): string[] {
-  const devSibling = resolve(shellDistDir, "..", "..", "core", "dist", "index.js");
-  return envBundle ? [envBundle, devSibling] : [devSibling];
+  return candidatesFor(envBundle, resolve(shellDistDir, "..", "..", "core", "dist", "index.js"));
 }
 
 export function uiBundleCandidates(
   envUiBundle: string | undefined,
   shellDistDir: string,
 ): string[] {
-  const devSibling = resolve(shellDistDir, "..", "..", "ui", "dist", "index.js");
-  return envUiBundle ? [envUiBundle, devSibling] : [devSibling];
+  return candidatesFor(envUiBundle, resolve(shellDistDir, "..", "..", "ui", "dist", "index.js"));
+}
+
+export function compatVencordBundleCandidates(
+  envBundle: string | undefined,
+  shellDistDir: string,
+): string[] {
+  return candidatesFor(
+    envBundle,
+    resolve(shellDistDir, "..", "..", "compat-vencord", "dist", "index.js"),
+  );
 }
 
 type FirstResult =
@@ -64,19 +90,47 @@ function loadFirst(candidates: readonly string[], read: (file: string) => string
 }
 
 /**
- * Load the core bundle (required) and append the UI bundle (optional) so the
- * shell evaluates both in a single script injection.
+ * Load the core bundle (required) and append the optional bundles (UI, then
+ * the Vencord adapter) so the shell evaluates everything in one script
+ * injection. Missing optional bundles only narrow the feature set; the
+ * loader reports which ones landed.
  */
 export function loadCoreBundle(
   envCoreBundle: string | undefined,
   envUiBundle: string | undefined,
   shellDistDir: string,
   read: (file: string) => string,
+  envCompatVencordBundle?: string,
 ): CoreBundleResult {
   const core = loadFirst(coreBundleCandidates(envCoreBundle, shellDistDir), read);
   if (!core.ok) return core;
 
-  const ui = loadFirst(uiBundleCandidates(envUiBundle, shellDistDir), read);
-  if (!ui.ok) return { ok: true, source: core.source, file: core.file, ui: false };
-  return { ok: true, source: `${core.source}\n;\n${ui.source}`, file: core.file, ui: true };
+  const optionalSpecs: readonly {
+    readonly name: string;
+    readonly candidates: readonly string[];
+  }[] = [
+    { name: "ui", candidates: uiBundleCandidates(envUiBundle, shellDistDir) },
+    {
+      name: "compat-vencord",
+      candidates: compatVencordBundleCandidates(envCompatVencordBundle, shellDistDir),
+    },
+  ];
+
+  const optional: OptionalBundle[] = [];
+  let source = core.source;
+  for (const spec of optionalSpecs) {
+    const loaded = loadFirst(spec.candidates, read);
+    optional.push({ name: spec.name, candidates: spec.candidates, loaded: loaded.ok });
+    if (loaded.ok) source = `${source}\n;\n${loaded.source}`;
+  }
+
+  const loadedNames = new Set(optional.filter((entry) => entry.loaded).map((entry) => entry.name));
+  return {
+    ok: true,
+    source,
+    file: core.file,
+    optional,
+    ui: loadedNames.has("ui"),
+    compatVencord: loadedNames.has("compat-vencord"),
+  };
 }

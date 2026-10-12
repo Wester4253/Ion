@@ -70,13 +70,19 @@ export function registerIpcHandlers(context: IpcContext): void {
     process.env["ION_UI_BUNDLE"],
     __dirname,
     (file) => readFileSync(file, "utf8"),
+    process.env["ION_COMPAT_VENCORD_BUNDLE"],
   );
   if (!bundle.ok) {
     console.error(
       `[ion] core bundle not found (tried ${bundle.tried.join(", ")}): ${bundle.reason}`,
     );
-  } else if (!bundle.ui) {
-    console.error(`[ion] ui bundle not found — the Ion settings page will not be available`);
+  } else {
+    if (!bundle.ui) {
+      console.error(`[ion] ui bundle not found — the Ion settings page will not be available`);
+    }
+    if (!bundle.compatVencord) {
+      console.warn(`[ion] compat-vencord bundle not found — Vencord plugins stay disabled`);
+    }
   }
   const coreSource = bundle.ok ? bundle.source : "";
 

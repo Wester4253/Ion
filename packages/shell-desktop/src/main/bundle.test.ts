@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { coreBundleCandidates, loadCoreBundle, uiBundleCandidates } from "./bundle";
+import {
+  compatVencordBundleCandidates,
+  coreBundleCandidates,
+  loadCoreBundle,
+  uiBundleCandidates,
+} from "./bundle";
 
 describe("coreBundleCandidates", () => {
   test("resolves the sibling workspace bundle", () => {
@@ -26,6 +31,21 @@ describe("uiBundleCandidates", () => {
   });
 });
 
+describe("compatVencordBundleCandidates", () => {
+  test("resolves the sibling workspace bundle", () => {
+    const [only] = compatVencordBundleCandidates(undefined, "/repo/packages/shell-desktop/dist");
+    expect(only).toMatch(/packages\/compat-vencord\/dist\/index\.js$/);
+  });
+
+  test("env override takes priority", () => {
+    const [first] = compatVencordBundleCandidates(
+      "/opt/ion/vc.js",
+      "/repo/packages/shell-desktop/dist",
+    );
+    expect(first).toBe("/opt/ion/vc.js");
+  });
+});
+
 describe("loadCoreBundle", () => {
   const dist = "/repo/packages/shell-desktop/dist";
 
@@ -34,7 +54,17 @@ describe("loadCoreBundle", () => {
       if (file === "/opt/ion/core.js") return "code";
       throw new Error("missing");
     });
-    expect(result).toEqual({ ok: true, source: "code", file: "/opt/ion/core.js", ui: false });
+    expect(result).toEqual({
+      ok: true,
+      source: "code",
+      file: "/opt/ion/core.js",
+      optional: [
+        { name: "ui", candidates: expect.anything() as string[], loaded: false },
+        { name: "compat-vencord", candidates: expect.anything() as string[], loaded: false },
+      ],
+      ui: false,
+      compatVencord: false,
+    });
   });
 
   test("falls through to the workspace bundle", () => {
@@ -55,8 +85,30 @@ describe("loadCoreBundle", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.ui).toBe(true);
+      expect(result.compatVencord).toBe(false);
       expect(result.source).toBe("core code\n;\nui code");
       expect(result.file).toBe("/opt/ion/core.js");
+    }
+  });
+
+  test("appends the compat-vencord bundle after the UI bundle", () => {
+    const result = loadCoreBundle(
+      "/opt/ion/core.js",
+      "/opt/ion/ui.js",
+      dist,
+      (file) => {
+        if (file === "/opt/ion/core.js") return "core code";
+        if (file === "/opt/ion/ui.js") return "ui code";
+        if (file === "/opt/ion/vc.js") return "vencord adapter code";
+        throw new Error("missing");
+      },
+      "/opt/ion/vc.js",
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.ui).toBe(true);
+      expect(result.compatVencord).toBe(true);
+      expect(result.source).toBe("core code\n;\nui code\n;\nvencord adapter code");
     }
   });
 
