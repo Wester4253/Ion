@@ -129,6 +129,14 @@ export function runSmoke(
         "document.getElementsByTagName('ion-debug-host').length === 1",
       ),
       coreStartMs: await probe("window.__ION__ ? Math.round(window.__ION__.startedAt) : -1"),
+      // Discord deletes window.localStorage from the window after its own
+      // scripts run, so this records both what core captured at injection and
+      // whether the page still exposes the property — the pair that separates
+      // "storage is broken" from "the page took it away", which otherwise
+      // looks identical from the plugin's side.
+      domStorage: await probe(
+        "window.__ION__ ? { backend: window.__ION__.storage.backend, pageExposesLocalStorage: typeof window.localStorage } : null",
+      ),
       webpackStatus: await probe(
         "window.__ION__ && window.__ION__.webpack ? window.__ION__.webpack : null",
       ),
