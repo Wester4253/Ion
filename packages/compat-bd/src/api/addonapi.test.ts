@@ -74,8 +74,13 @@ describe("BdApi.Plugins", () => {
   });
 
   it("reports enablement and drives the host", async () => {
-    const { api } = await pluginsFixture();
+    const { api, registered } = await pluginsFixture();
     expect(api.isEnabled("TestPlugin")).toBe(true);
+
+    // Start it the way the host's stage would before exercising disable:
+    // there is nothing to stop until the plugin has started.
+    await registered[0]?.start?.(ctx);
+    expect(counters.started).toBe(1);
 
     expect(api.disable("TestPlugin")).toBe(true);
     expect(api.isEnabled("TestPlugin")).toBe(false);
@@ -83,7 +88,16 @@ describe("BdApi.Plugins", () => {
 
     expect(api.toggle("TestPlugin")).toBe(true);
     expect(api.isEnabled("TestPlugin")).toBe(true);
-    expect(counters.started).toBe(1);
+    expect(counters.started).toBe(2);
+  });
+
+  it("has nothing to stop before the plugin has started", async () => {
+    const { api } = await pluginsFixture();
+
+    // Metadata-only at initialize: disable before the stage is a no-op on
+    // the lifecycle, exactly as the real host guards by state.
+    expect(api.disable("TestPlugin")).toBe(true);
+    expect(counters.stopped).toBe(0);
   });
 
   it("resolves by name and by filename", async () => {

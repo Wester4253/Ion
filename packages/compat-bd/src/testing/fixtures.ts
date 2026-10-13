@@ -88,13 +88,22 @@ export function installShell(files: Record<string, string> | undefined): void {
 /**
  * A minimal host with upstream's uniqueness rules: duplicate ids and
  * display names throw, exactly like `createPluginHost`. Toggling runs the
- * plugin's lifecycle. Returns the registered plugins for assertions.
+ * plugin's lifecycle and records the result the way core does — a `start()`
+ * that throws leaves `state: "failed"` with the message in `error`, which is
+ * the field `BdApi.Plugins.enable()` and the compat harness both read.
+ * Returns the registered plugins for assertions.
  */
 export function installHost(...preRegistered: IonPlugin[]): IonPlugin[] {
   const registered: IonPlugin[] = [...preRegistered];
   const enabled = new Map<string, boolean>(
     registered.map((plugin) => [plugin.id, plugin.defaultEnabled ?? true]),
   );
+  /** Per-plugin lifecycle state, mirroring core's `PluginRecord.state`. */
+  const states = new Map<string, IonPluginInfo["state"]>();
+  const errors = new Map<string, string>();
+  for (const plugin of registered) {
+    states.set(plugin.id, (enabled.get(plugin.id) ?? true) ? "started" : "stopped");
+  }
   const toInfo = (plugin: IonPlugin): IonPluginInfo => {
     const isEnabled = enabled.get(plugin.id) ?? true;
     return {
@@ -104,9 +113,22 @@ export function installHost(...preRegistered: IonPlugin[]): IonPlugin[] {
       authors: plugin.authors?.map((author) => author.name) ?? [],
       version: plugin.version,
       enabled: isEnabled,
-      state: isEnabled ? "started" : "stopped",
-      error: undefined,
+      state: states.get(plugin.id) ?? (isEnabled ? "started" : "stopped"),
+      error: errors.get(plugin.id),
     };
+  };
+  /** Runs a lifecycle hook, recording a rejection the way core's host does. */
+  const runLifecycle = async (plugin: IonPlugin, hook: "start" | "stop"): Promise<void> => {
+    try {
+      // Awaiting matches core's `await definition.start?.(...)`: it records
+      // a rejection from an async start as a failure, not as a success.
+      await plugin[hook]?.(ctx);
+      errors.delete(plugin.id);
+      states.set(plugin.id, hook === "start" ? "started" : "stopped");
+    } catch (error) {
+      states.set(plugin.id, "failed");
+      errors.set(plugin.id, error instanceof Error ? error.message : String(error));
+    }
   };
   const api: IonPluginsApi = {
     register(plugin) {
@@ -118,6 +140,7 @@ export function installHost(...preRegistered: IonPlugin[]): IonPlugin[] {
       }
       registered.push(plugin);
       enabled.set(plugin.id, plugin.defaultEnabled ?? true);
+      states.set(plugin.id, "stopped");
     },
     list: () => registered.map(toInfo),
     setEnabled(id, next) {
@@ -125,11 +148,17 @@ export function installHost(...preRegistered: IonPlugin[]): IonPlugin[] {
       if (!plugin) return Promise.reject(new Error(`unknown plugin: ${id}`));
       enabled.set(id, next);
       // Mirror the real host: toggling runs the plugin's lifecycle.
-      if (next) void plugin.start?.(ctx);
-      else void plugin.stop?.(ctx);
-      return Promise.resolve();
+      return runLifecycle(plugin, next ? "start" : "stop");
     },
-    status: () => ({ registered: registered.length, started: registered.length, failed: 0 }),
+    status: () => {
+      const infos = registered.map(toInfo);
+      return {
+        registered: infos.length,
+        started: infos.filter((info) => info.state === "started" || info.state === "starting")
+          .length,
+        failed: infos.filter((info) => info.state === "failed").length,
+      };
+    },
     subscribe: () => () => undefined,
   };
   const current = window.__ION__ ?? {};

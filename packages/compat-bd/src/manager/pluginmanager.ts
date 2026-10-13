@@ -3,21 +3,33 @@
  *
  * Upstream `PluginManager` owns its own enablement store, MutationObserver,
  * and navigation events; here those responsibilities belong to the host:
- * `initialize()` evaluates every `bd/plugins/*.plugin.js` file and
- * registers one Ion plugin per addon, and the host calls back into the
+ * `initialize()` reads every `bd/plugins/*.plugin.js` file, parses its meta,
+ * and registers one Ion plugin per addon, and the host calls back into the
  * lifecycle handles below. The pieces the host does not have stay in this
  * file, ported from upstream (Apache-2.0, see THIRD_PARTY.md): the shared
  * refcounted MutationObserver behind BD's deprecated `observer()`, the
  * navigation event behind BD's deprecated `onSwitch()`, and per-plugin
- * error isolation — a plugin that throws while loading, starting,
+ * error isolation — a plugin that throws while evaluating, starting,
  * stopping, observing, or switching is reported under its own name and
- * never affects another plugin's lifecycle.
+ * never affects another plugin's lifecycle. A start that throws propagates
+ * to the host, which records `state: "failed"` with the reason; swallowing
+ * it here would let the host report a start that never happened.
+ *
+ * Modules are evaluated lazily, at the plugin's stage rather than at
+ * `initialize()`. Upstream evaluates at load, but upstream injects after
+ * Discord has loaded, so a plugin's top-level `BdApi.React` read already
+ * has a value. Here `initialize()` runs before Discord's first script, so
+ * an eager evaluation would hand every plugin `undefined` and pin it there
+ * in its own variable. Evaluating at the stage matches the moment upstream
+ * reaches: metadata parses at initialize, the module and its instance
+ * exist from the start stage onward. See THIRD_PARTY.md.
  *
  * Deliberate deviations from upstream, recorded in THIRD_PARTY.md:
  * - a display name the host already owns (e.g. one of Vencord's 32
  *   acceptance plugins) is SKIPPED with a one-line reason — upstream has a
  *   single flat namespace where the later addon simply wins,
- * - `require()` is an honest throwing shim (see evaluate.ts),
+ * - `require()` satisfies `events` page-side and otherwise throws honestly
+ *   with the module id (see evaluate.ts),
  * - BD plugins default to enabled, matching the host's default; upstream
  *   keeps a persisted enable map that defaults to off,
  * - the runAt points map onto the host's stages (`connection` →
@@ -45,7 +57,8 @@ const DUPLICATE_DOWNLOAD = /\.plugin\s?\([0-9]+\)\.js/;
 /** One loaded addon, registered with the host under {@link hostId}. */
 export interface BdPluginRecord {
   readonly meta: BdAddonMeta;
-  readonly instance: BdPluginInstance;
+  /** The source this addon parsed from, re-read at its stage to evaluate. */
+  readonly source: string;
   /** The id this addon occupies: `bd.<name>`, whitespace replaced by `_`. */
   readonly hostId: string;
   /** Upstream: whether `start()` found an `observer` method (refcounted). */
@@ -100,6 +113,8 @@ function isPluginInstance(value: unknown): value is BdPluginInstance {
 
 export class BdPluginManager {
   readonly #records: BdPluginRecord[] = [];
+  /** Instances built at their stage, keyed by the addon's host id. */
+  readonly #instances = new Map<string, BdPluginInstance>();
   readonly #active = new Set<BdPluginRecord>();
   readonly #createObserver: (callback: (mutations: MutationBatch) => void) => ObserverHandle;
   #observer: ObserverHandle | undefined;
@@ -118,9 +133,10 @@ export class BdPluginManager {
   }
 
   /**
-   * Evaluates and registers every plugin in `bd/plugins`. Individual files
-   * fail in isolation — one bad plugin never blocks another — so the only
-   * rejection path is a missing plugin host.
+   * Reads and registers every plugin in `bd/plugins`, parsing each file's
+   * metadata; modules evaluate later, at their stage (see the class
+   * header). Individual files fail in isolation — one bad plugin never
+   * blocks another — so the only rejection path is a missing plugin host.
    */
   async initialize(): Promise<readonly BdPluginRecord[]> {
     if (this.#initialized) return this.#records;
@@ -188,9 +204,18 @@ export class BdPluginManager {
    */
   settingsPanel(idOrName: string): unknown {
     const record = this.resolve(idOrName);
-    if (!record || typeof record.instance.getSettingsPanel !== "function") return undefined;
+    if (!record) return undefined;
+    // A panel can only exist once the plugin has started: evaluation and
+    // construction happen at the stage, so before it there is no instance
+    // to ask. This says so instead of reporting a plugin that has none.
+    const instance = this.#instances.get(record.hostId);
+    if (!instance) {
+      adapterLogger.warn(`${record.meta.name}: no settings panel yet — the plugin has not started`);
+      return undefined;
+    }
+    if (typeof instance.getSettingsPanel !== "function") return undefined;
     try {
-      const panel = record.instance.getSettingsPanel.call(record.instance);
+      const panel = instance.getSettingsPanel.call(instance);
       adapterLogger.warn(
         `${record.meta.name}: its settings panel cannot be shown — Ion's plugin panel renders toggles only`,
       );
@@ -217,33 +242,49 @@ export class BdPluginManager {
       adapterLogger.warn(`${filename}: skipped — ${read.reason}`);
       return undefined;
     }
-    const { meta } = read;
+
+    // Metadata only. The module itself evaluates at the start stage, which
+    // is the moment upstream reaches (see the class header).
+    return { meta: read.meta, source, hostId: bdAddonIdFor(read.meta.name), hasObserver: false };
+  }
+
+  /**
+   * Evaluates the module and builds the instance. Called once, at the
+   * addon's stage.
+   *
+   * A failure THROWS rather than being logged here: core's `startPlugin`
+   * catches it and records `state: "failed"` with this message as the
+   * plugin's `error`, which is the field the compat harness reads to score
+   * `start failed: …`. Logging and returning would leave the host reporting
+   * `state: "started"` with no error — a pass the adapter never earned.
+   */
+  #instantiate(record: BdPluginRecord): BdPluginInstance {
+    const existing = this.#instances.get(record.hostId);
+    if (existing) return existing;
+    const { meta, source } = record;
 
     let exported: unknown;
     try {
       exported = evaluatePluginModule(source, meta.filename, PLUGIN_DIR);
     } catch (error) {
-      this.#fail(meta, "failed to evaluate", error);
-      return undefined;
+      throw new Error(`failed to evaluate — ${errorMessage(error)}`, { cause: error });
     }
     if (typeof exported !== "function") {
-      this.#fail(meta, "did not export a function");
-      return undefined;
+      throw new Error("did not export a function");
     }
 
     let instance: unknown;
     try {
       instance = instantiatePlugin(exported as BdPluginExport, meta);
     } catch (error) {
-      this.#fail(meta, "constructor threw", error);
-      return undefined;
+      throw new Error(`constructor threw — ${errorMessage(error)}`, { cause: error });
     }
     if (!isPluginInstance(instance)) {
-      this.#fail(meta, "missing start() or stop()");
-      return undefined;
+      throw new Error("missing start() or stop()");
     }
 
-    return { meta, instance, hostId: bdAddonIdFor(meta.name), hasObserver: false };
+    this.#instances.set(record.hostId, instance);
+    return instance;
   }
 
   /** Registers with the host; false (plus a one-line reason) on a clash. */
@@ -283,30 +324,31 @@ export class BdPluginManager {
     };
   }
 
-  #fail(meta: BdAddonMeta, reason: string, error?: unknown): void {
-    const suffix = error === undefined ? "" : ` — ${errorMessage(error)}`;
-    // `%c[Name]%c …` expands to "[Name] …" in the captured console output,
-    // which is how the harness attributes this failure to the plugin.
-    boundLoggerFor(meta.name).error(`${meta.name} v${meta.version} ${reason}${suffix}`);
-  }
-
   #startAddon(record: BdPluginRecord): void {
+    // Evaluation happens here rather than at initialize; see the class
+    // header. It throws on failure so core records `state: "failed"` with
+    // the reason — see `#instantiate`.
+    const instance = this.#instantiate(record);
     // Upstream order: run start(), then attach the observer only if start
     // succeeded — a throwing start() leaves no observer behind.
-    record.instance.start();
-    record.hasObserver = typeof record.instance.observer === "function";
+    instance.start();
+    record.hasObserver = typeof instance.observer === "function";
     if (record.hasObserver) this.#retainObserver();
-    if (typeof record.instance.onSwitch === "function") this.#retainNavigation();
+    if (typeof instance.onSwitch === "function") this.#retainNavigation();
     this.#active.add(record);
   }
 
   #stopAddon(record: BdPluginRecord): void {
+    const instance = this.#instances.get(record.hostId);
+    // Stopped before it ever started (evaluation failed, or the stage never
+    // arrived): there is nothing to release and nothing to run.
+    if (!instance) return;
     // Upstream releases the observer BEFORE running stop().
     if (this.#active.delete(record)) {
       if (record.hasObserver) this.#releaseObserver();
-      if (typeof record.instance.onSwitch === "function") this.#releaseNavigation();
+      if (typeof instance.onSwitch === "function") this.#releaseNavigation();
     }
-    record.instance.stop();
+    instance.stop();
   }
 
   #retainObserver(): void {
@@ -330,9 +372,11 @@ export class BdPluginManager {
       // A plugin may disable others (or itself) mid-batch; Set iteration
       // visits every entry that is still active.
       for (const record of this.#active) {
-        if (typeof record.instance.observer !== "function") continue;
+        // Only started addons are active, so an instance always exists here.
+        const instance = this.#instances.get(record.hostId);
+        if (!instance || typeof instance.observer !== "function") continue;
         try {
-          record.instance.observer(mutation);
+          instance.observer(mutation);
         } catch (error) {
           boundLoggerFor(record.meta.name).stacktrace(
             `observer() threw in ${record.meta.name} v${record.meta.version}`,
@@ -360,9 +404,10 @@ export class BdPluginManager {
 
   #dispatchSwitch(): void {
     for (const record of this.#active) {
-      if (typeof record.instance.onSwitch !== "function") continue;
+      const instance = this.#instances.get(record.hostId);
+      if (!instance || typeof instance.onSwitch !== "function") continue;
       try {
-        record.instance.onSwitch();
+        instance.onSwitch();
       } catch (error) {
         boundLoggerFor(record.meta.name).stacktrace(
           `onSwitch() threw in ${record.meta.name} v${record.meta.version}`,

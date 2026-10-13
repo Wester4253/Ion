@@ -13,6 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { pluginsHost } from "../host";
 import {
   CLASS_BODY,
   classBody,
@@ -156,18 +157,44 @@ describe("BdPluginManager", () => {
       "Good.plugin.js": pluginSource("Good", CLASS_BODY),
     });
     const registered = installHost();
+    const host = pluginsHost();
 
     const records = await new BdPluginManager().initialize();
 
-    expect(records.map((record) => record.meta.name)).toEqual(["Good"]);
-    expect(registered.map((plugin) => plugin.name)).toEqual(["Good"]);
-    // Reported under the broken plugin's own name so the harness attributes it.
-    expect(console.error).toHaveBeenCalledWith(
-      "%c[Broken]%c",
-      expect.any(String),
-      expect.any(String),
-      expect.stringContaining("failed to evaluate"),
-    );
+    // Metadata parses for both: a module that cannot evaluate still
+    // registers, and fails only when its stage arrives.
+    expect(records.map((record) => record.meta.name)).toEqual(["Broken", "Good"]);
+    expect(registered.map((plugin) => plugin.name)).toEqual(["Broken", "Good"]);
+
+    await host.setEnabled("bd.Broken", true);
+    await host.setEnabled("bd.Good", true);
+
+    // The failure reaches the host as state + error, which is what the
+    // compat harness scores as `start failed: …`. Logging it here instead
+    // would leave the host reporting `started` with no error — a pass the
+    // adapter never earned.
+    const broken = host.list().find((info) => info.id === "bd.Broken");
+    expect(broken?.state).toBe("failed");
+    expect(broken?.error).toContain("failed to evaluate — load boom");
+    expect(host.status().failed).toBe(1);
+
+    // The broken plugin never started, and never touched the other one.
+    expect(counters.started).toBe(1);
+  });
+
+  it("defers evaluation until the plugin's start stage", async () => {
+    installShell({
+      "Late.plugin.js": pluginSource("LatePlugin", CLASS_BODY),
+    });
+    const registered = installHost();
+
+    await new BdPluginManager().initialize();
+
+    // Nothing has evaluated or started yet: initialization is metadata only.
+    expect(counters.started).toBe(0);
+
+    await registered[0]?.start?.(ctx);
+    expect(counters.started).toBe(1);
   });
 
   it("skips a display name the host already owns", async () => {
@@ -331,9 +358,21 @@ describe("BdPluginManager", () => {
         'module.exports = class { start() {} stop() {} getSettingsPanel() { return "panel-value"; } };',
       ),
     });
-    installHost();
+    const registered = installHost();
     const manager = new BdPluginManager();
     await manager.initialize();
+
+    // Before the stage there is no instance to ask, and it says so rather
+    // than reporting a plugin that has none.
+    expect(manager.settingsPanel("PanelPlugin")).toBeUndefined();
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      "",
+      expect.stringContaining("not started"),
+    );
+
+    await registered[0]?.start?.(ctx);
 
     expect(manager.settingsPanel("PanelPlugin")).toBe("panel-value");
     expect(console.warn).toHaveBeenCalledWith(
