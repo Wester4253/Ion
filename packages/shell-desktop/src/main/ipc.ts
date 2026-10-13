@@ -129,7 +129,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       event.returnValue = { ok: false, error: "invalid read request" } satisfies FsResult<never>;
       return;
     }
-    event.returnValue = scoped(req.path, (abs) => {
+    // `scoped` re-derives the path from the request object (see fsReaddir):
+    // passing the parsed string would fail its record check.
+    event.returnValue = scoped(raw, (abs) => {
       try {
         const data = readFileSync(abs, req.encoding === "base64" ? "base64" : "utf8");
         return { ok: true, value: data } satisfies FsResult<string>;
@@ -149,7 +151,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       event.returnValue = { ok: false, error: "invalid write request" } satisfies FsResult<never>;
       return;
     }
-    event.returnValue = scoped(req.path, (abs) => {
+    event.returnValue = scoped(raw, (abs) => {
       try {
         mkdirSync(dirname(abs), { recursive: true });
         writeFileSync(abs, req.data, req.encoding === "base64" ? "base64" : "utf8");
