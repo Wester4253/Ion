@@ -215,4 +215,38 @@ describe("analyze", () => {
     expect(report.run.unattributedWarnings).toEqual([]);
     expect(report.run.unattributedRendererErrors).toEqual([]);
   });
+
+  test("defers an entry the runner never staged, instead of blaming the adapter", () => {
+    const sweep: readonly AcceptanceEntry[] = [
+      {
+        group: "bulk",
+        name: "Gone",
+        id: "shelter.gone",
+        url: "https://example.com/gone/",
+        unstaged: "not staged: plugin.js HTTP 404",
+      },
+      { group: "bulk", name: "Here", id: "shelter.here", url: "https://example.com/here/" },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 1, started: 1, failed: 0 },
+          ids: ["shelter.here:started"],
+          failures: [],
+        },
+      },
+      sweep,
+      { ...OPTIONS, ecosystem: "shelter", upstream: "live index https://shindex.uwu.network/data" },
+    );
+
+    // Not staged means nothing was measured — "did not register" would put
+    // the failure on the adapter for a file that never arrived.
+    const gone = plugin(report, "Gone");
+    expect(gone.tier1).toBe("not-run");
+    expect(gone.status).toBe("deferred");
+    expect(gone.reason).toContain("HTTP 404");
+    expect(plugin(report, "Here").status).toBe("pass");
+    expect(report.summary).toMatchObject({ total: 2, pass: 1, fail: 0, deferred: 1 });
+  });
 });

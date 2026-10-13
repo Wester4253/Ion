@@ -15,8 +15,23 @@ import { join } from "node:path";
 const DEFAULT_SETTLE_MS = 9_000;
 /** Extra time above the settle delay for the fallback finish timer. */
 const FALLBACK_MARGIN_MS = 16_000;
+
 /** Console warnings kept in the report (deduplicated; further ones dropped). */
-const MAX_WARNINGS = 100;
+const DEFAULT_MAX_WARNINGS = 100;
+
+function maxWarnings(): number {
+  const asked = Number(process.env["ION_SMOKE_MAX_WARNINGS"]);
+  return Number.isInteger(asked) && asked > 0 ? asked : DEFAULT_MAX_WARNINGS;
+}
+
+/**
+ * A backstop against a runaway log, not a data-loss point. A hundred is
+ * right for a ten-plugin acceptance set and wrong for a sweep of a hundred
+ * and thirty: a cap reached in the middle converts every plugin logged after
+ * it from "pass with warnings" to a clean pass. The runner raises it to
+ * match what it staged.
+ */
+const MAX_WARNINGS = maxWarnings();
 
 /**
  * Console errors that occur by design in a healthy run, each with the

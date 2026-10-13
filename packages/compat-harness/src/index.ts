@@ -22,6 +22,18 @@
  *   way shelter's updater does and verifies each against its own pinned
  *   digest before writing it. Nothing staged is unverified.
  *
+ * Sources:
+ * - acceptance (default): the checked-in, hash-pinned set — the number the
+ *   project commits to, and the only one where a file moving upstream is
+ *   caught rather than measured.
+ * - index: the ecosystem's live catalog (shelter only, for now). Every
+ *   plugin it lists is staged and scored as one sweep. Nothing is pinned
+ *   because the catalog publishes no digests; instead the digest of every
+ *   file actually staged is written to the run's artifacts, so a sweep can
+ *   be reproduced or re-compared. A plugin whose code cannot be fetched is
+ *   deferred with the reason — nothing was measured, and calling it a
+ *   failure would blame the adapter for a file that never arrived.
+ *
  * Usage:
  *   node dist/index.js [--ecosystem vencord|bd|shelter] [--out <dir>]
  *                      [--settle-ms <n>] [--profile <dir>] [--docs <path>]
@@ -47,6 +59,8 @@ const SMOKE_MARGIN_MS = 120_000;
 
 interface CliOptions {
   readonly ecosystem: Ecosystem;
+  /** How the plugin set is chosen: the checked-in acceptance file, or the live index. */
+  readonly source: PluginSource;
   readonly out: string | null;
   readonly settleMs: number;
   readonly profile: string | null;
@@ -57,6 +71,9 @@ interface CliOptions {
 const USAGE = `compat-harness — score an ecosystem's acceptance set
 
   --ecosystem NAME   vencord (default), bd, or shelter
+  --source NAME      acceptance (default): the checked-in, hash-pinned set.
+                     index: the ecosystem's live catalog — every plugin it
+                     lists (shelter only for now), scored as one sweep
   --out DIR          run artifacts (default: compat-runs/<timestamp>)
   --settle-ms N      soak window before the report (default: ${String(DEFAULT_SETTLE_MS)})
   --profile DIR      isolated profile (default: a throwaway temp profile)
@@ -69,11 +86,22 @@ const USAGE = `compat-harness — score an ecosystem's acceptance set
 /** Every ecosystem this runner knows how to seed. */
 const ECOSYSTEMS = ["vencord", "bd", "shelter"] as const;
 
+/** How the plugin set to score is chosen. */
+const SOURCES = ["acceptance", "index"] as const;
+type PluginSource = (typeof SOURCES)[number];
+
 /** Generated scoreboard path when `--docs` is absent. */
 const DOCS_PATHS: Readonly<Record<Ecosystem, string>> = {
   vencord: "compat.md",
   bd: "compat-bd.md",
   shelter: "compat-shelter.md",
+};
+
+/** Scoreboard path for an index sweep, which is a different document. */
+const INDEX_DOCS_PATHS: Readonly<Record<Ecosystem, string>> = {
+  vencord: "compat-vencord-index.md",
+  bd: "compat-bd-index.md",
+  shelter: "compat-shelter-index.md",
 };
 
 /** Which workspace package owns each ecosystem's acceptance file. */
@@ -85,6 +113,10 @@ const ACCEPTANCE_PACKAGES: Readonly<Record<Ecosystem, string>> = {
 
 function isEcosystem(value: string): value is Ecosystem {
   return (ECOSYSTEMS as readonly string[]).includes(value);
+}
+
+function isSource(value: string): value is PluginSource {
+  return (SOURCES as readonly string[]).includes(value);
 }
 
 /** Value of `--flag VALUE` or `--flag=VALUE`, or null when absent. */
@@ -99,7 +131,15 @@ function valueOf(argv: readonly string[], flag: string): string | null {
   return null;
 }
 
-const VALUE_FLAGS = ["--ecosystem", "--out", "--settle-ms", "--profile", "--docs", "--report"];
+const VALUE_FLAGS = [
+  "--ecosystem",
+  "--source",
+  "--out",
+  "--settle-ms",
+  "--profile",
+  "--docs",
+  "--report",
+];
 
 function parseArgs(argv: readonly string[]): CliOptions | null {
   for (let i = 0; i < argv.length; i += 1) {
@@ -124,6 +164,18 @@ function parseArgs(argv: readonly string[]): CliOptions | null {
   }
   const ecosystem: Ecosystem = ecosystemRaw;
 
+  const sourceRaw = valueOf(argv, "--source") ?? "acceptance";
+  if (!isSource(sourceRaw)) {
+    throw new Error(`unknown --source: ${sourceRaw} (expected ${SOURCES.join(", ")})`);
+  }
+  if (sourceRaw === "index" && ecosystem !== "shelter") {
+    throw new Error(
+      `--source index is not available for --ecosystem ${ecosystem} yet ` +
+        `(the harness can only sweep a catalog it knows how to fetch)`,
+    );
+  }
+  const source: PluginSource = sourceRaw;
+
   const settleRaw = valueOf(argv, "--settle-ms");
   let settleMs = DEFAULT_SETTLE_MS;
   if (settleRaw !== null) {
@@ -135,6 +187,7 @@ function parseArgs(argv: readonly string[]): CliOptions | null {
   }
   return {
     ecosystem,
+    source,
     out: valueOf(argv, "--out"),
     settleMs,
     profile: valueOf(argv, "--profile"),
@@ -159,6 +212,9 @@ interface RunProfile {
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+/** The live Shelter plugin index: a list of author repos and their plugins. */
+const SHELTER_INDEX_URL = "https://shindex.uwu.network/data";
+
 /**
  * Fetches `url` and checks it against `expected`. A non-2xx response or a
  * digest mismatch throws, so an unverifiable plugin never reaches the client.
@@ -182,12 +238,45 @@ async function stageFile(path: string, contents: Buffer): Promise<void> {
   await writeFile(path, contents);
 }
 
+/** A download that produced bytes, or explains why it did not. */
+type FetchOutcome =
+  { readonly ok: true; readonly bytes: Buffer } | { readonly ok: false; readonly reason: string };
+
+/**
+ * Fetches `url` with no pin to check against.
+ *
+ * Used by the index sweep, where the catalog publishes no digests. It
+ * reports rather than throws because one dead plugin must not stop the other
+ * hundred from being measured.
+ */
+async function fetchBytes(url: string): Promise<FetchOutcome> {
+  try {
+    const response = await fetch(url, { headers: { "user-agent": USER_AGENT } });
+    if (!response.ok) return { ok: false, reason: `HTTP ${String(response.status)}` };
+    return { ok: true, bytes: Buffer.from(await response.arrayBuffer()) };
+  } catch (error) {
+    return { ok: false, reason: `download failed: ${message(error)}` };
+  }
+}
+
+/** One line from any thrown value. */
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** A non-empty string field from an untyped JSON document, or undefined. */
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 /** Provenance for one staged file: where it came from and how it verified. */
 interface StagedFile {
   readonly name: string;
   readonly url: string;
   readonly sha256: string;
   readonly file: string;
+  /** Index sweep only: the author repo the plugin was listed under. */
+  readonly repo?: string;
 }
 
 /** Writes the provenance record beside the run's other artifacts. */
@@ -290,11 +379,134 @@ async function stageShelterPlugins(
   await writeStaged(artifactsDir, "shelter-staged.json", staged);
 }
 
+/**
+ * Stages every plugin the live Shelter index lists and returns one entry per
+ * plugin to score.
+ *
+ * Nothing is pinned here: the index publishes no digests, so there is no
+ * value to verify against. What was actually staged is recorded instead,
+ * which is what makes a sweep reproducible — a later pass can re-download
+ * and compare against the run it is being read alongside, rather than
+ * against a pin that never existed.
+ *
+ * A plugin whose `plugin.js` cannot be fetched is deferred with the reason
+ * rather than failed: nothing was measured, and calling it a failure would
+ * blame the adapter. A plugin whose `plugin.json` cannot be fetched *is*
+ * staged — the adapter reads the directory as it finds it and reports a
+ * plugin it cannot name, which is the measured truth about what the author
+ * published.
+ */
+async function stageShelterIndex(
+  profileDir: string,
+  artifactsDir: string,
+): Promise<AcceptanceEntry[]> {
+  const response = await fetch(SHELTER_INDEX_URL, { headers: { "user-agent": USER_AGENT } });
+  if (!response.ok) {
+    throw new Error(`the Shelter index did not answer: HTTP ${String(response.status)}`);
+  }
+  const repos: unknown = await response.json();
+  if (!Array.isArray(repos)) {
+    throw new Error("the Shelter index did not answer with a list of repositories");
+  }
+
+  const pluginsRoot = resolve(profileDir, "ion", "shelter", "plugins");
+  const taken = new Map<string, number>();
+  const staged: StagedFile[] = [];
+  const entries: AcceptanceEntry[] = [];
+
+  for (const rawRepo of repos) {
+    const repo = rawRepo as { name?: unknown; plugins?: unknown };
+    const repoName = stringField(repo.name) ?? "";
+    if (!Array.isArray(repo.plugins)) continue;
+
+    for (const rawPlugin of repo.plugins) {
+      const plugin = rawPlugin as { name?: unknown; author?: unknown; url?: unknown };
+      const url = stringField(plugin.url);
+      // The index lists what the author published; a plugin with no source
+      // URL has nothing to install and nothing to measure.
+      if (url === undefined) continue;
+      const name = stringField(plugin.name) ?? url;
+
+      let folder: string;
+      let jsUrl: string;
+      let manifestUrl: string;
+      try {
+        const segments = new URL(url).pathname.split("/").filter((part) => part.length > 0);
+        const slug = segments.at(-1) ?? "plugin";
+        // Three plugins in the index share a slug with another. The index's
+        // own order decides, so the same sweep always numbers them the same
+        // way.
+        const seen = taken.get(slug) ?? 0;
+        taken.set(slug, seen + 1);
+        folder = seen === 0 ? slug : `${slug}-${String(seen + 1)}`;
+        jsUrl = new URL("plugin.js", url).href;
+        manifestUrl = new URL("plugin.json", url).href;
+      } catch (error) {
+        entries.push({
+          group: "bulk",
+          name,
+          unstaged: `not staged: the index lists an unusable URL (${message(error)})`,
+        });
+        continue;
+      }
+
+      const js = await fetchBytes(jsUrl);
+      if (!js.ok) {
+        entries.push({
+          group: "bulk",
+          name,
+          id: `shelter.${folder}`,
+          url,
+          unstaged: `not staged: plugin.js ${js.reason}`,
+        });
+        continue;
+      }
+
+      await stageFile(resolve(pluginsRoot, folder, "plugin.js"), js.bytes);
+      staged.push({
+        name,
+        url: jsUrl,
+        sha256: createHash("sha256").update(js.bytes).digest("hex"),
+        file: `${folder}/plugin.js`,
+        ...(repoName.length > 0 ? { repo: repoName } : {}),
+      });
+
+      const manifest = await fetchBytes(manifestUrl);
+      if (manifest.ok) {
+        await stageFile(resolve(pluginsRoot, folder, "plugin.json"), manifest.bytes);
+        staged.push({
+          name,
+          url: manifestUrl,
+          sha256: createHash("sha256").update(manifest.bytes).digest("hex"),
+          file: `${folder}/plugin.json`,
+          ...(repoName.length > 0 ? { repo: repoName } : {}),
+        });
+      }
+
+      const entry: AcceptanceEntry = { group: "bulk", name, id: `shelter.${folder}`, url };
+      entries.push(
+        manifest.ok
+          ? entry
+          : { ...entry, note: `manifest not published: plugin.json ${manifest.reason}` },
+      );
+    }
+  }
+
+  // Provenance for a sweep has to be stronger than a pin, because there is
+  // none: every file that was staged, with the digest it actually had.
+  await writeStaged(artifactsDir, "shelter-index-staged.json", staged);
+  // Doubles as the entry list for `--report`, so a sweep can be re-analyzed
+  // without re-fetching the catalog.
+  await writeStaged(artifactsDir, "shelter-index.json", entries);
+  return entries;
+}
+
 async function runSmoke(
   options: CliOptions,
   smokeOut: string,
   extra: readonly string[],
   profile: RunProfile | null,
+  maxWarnings: number,
 ): Promise<number> {
   const root = repoRoot();
   const args = [
@@ -308,7 +520,14 @@ async function runSmoke(
     ...extra,
   ];
   return await new Promise<number>((resolveExit, reject) => {
-    const child = spawn(process.execPath, args, { stdio: "inherit", cwd: root });
+    const child = spawn(process.execPath, args, {
+      stdio: "inherit",
+      cwd: root,
+      // The capture keeps one line per distinct warning; a sweep of a
+      // hundred plugins would hit its default and lose the rest, which would
+      // quietly turn "pass with warnings" into "pass".
+      env: { ...process.env, ION_SMOKE_MAX_WARNINGS: String(maxWarnings) },
+    });
     child.on("error", reject);
     child.on("exit", (code) => {
       resolveExit(code ?? 1);
@@ -326,21 +545,37 @@ async function main(): Promise<void> {
   // File-based ecosystems: staged into a profile, never seeded through
   // settings the way Vencord's are.
   const stagesFiles = isBd || isShelter;
+  // An index sweep scores the live catalog, so its entries arrive during
+  // staging rather than being read from the checked-in file.
+  const usesIndex = options.source === "index";
 
-  const acceptancePath = resolve(
-    root,
-    "packages",
-    ACCEPTANCE_PACKAGES[options.ecosystem],
-    "acceptance.json",
-  );
-  // The Vencord file is a bare array; the BD and Shelter files carry a
-  // source/note wrapper around their `entries`.
-  const document = JSON.parse(await readFile(acceptancePath, "utf8")) as
-    AcceptanceEntry[] | { entries: AcceptanceEntry[] };
-  const acceptance = Array.isArray(document) ? document : document.entries;
+  let acceptance: readonly AcceptanceEntry[] = [];
+  if (usesIndex) {
+    // When re-analyzing a past sweep, the entries are the artifact that run
+    // wrote — re-fetching the catalog would score today's listing against
+    // yesterday's results.
+    if (options.reportOnly !== null) {
+      const entriesPath = resolve(dirname(dirname(options.reportOnly)), "shelter-index.json");
+      acceptance = JSON.parse(await readFile(entriesPath, "utf8")) as AcceptanceEntry[];
+    }
+  } else {
+    const acceptancePath = resolve(
+      root,
+      "packages",
+      ACCEPTANCE_PACKAGES[options.ecosystem],
+      "acceptance.json",
+    );
+    // The Vencord file is a bare array; the BD and Shelter files carry a
+    // source/note wrapper around their `entries`.
+    const document = JSON.parse(await readFile(acceptancePath, "utf8")) as
+      AcceptanceEntry[] | { entries: AcceptanceEntry[] };
+    acceptance = Array.isArray(document) ? document : document.entries;
+  }
 
   let upstream: string;
-  if (isBd) {
+  if (usesIndex) {
+    upstream = `live index ${SHELTER_INDEX_URL}`;
+  } else if (isBd) {
     upstream = "133bc83 (Apache-2.0 port of BdApi)";
   } else if (isShelter) {
     upstream = "6d42725 (CC0-1.0 uwu/shelter)";
@@ -358,7 +593,13 @@ async function main(): Promise<void> {
   const out = options.out ?? resolve(root, "compat-runs", stamp);
   const smokeOut = resolve(out, "smoke");
   const reportPath = options.reportOnly ?? resolve(smokeOut, "report.json");
-  const docs = options.docs ?? resolve(root, "docs", DOCS_PATHS[options.ecosystem]);
+  const docs =
+    options.docs ??
+    resolve(
+      root,
+      "docs",
+      usesIndex ? INDEX_DOCS_PATHS[options.ecosystem] : DOCS_PATHS[options.ecosystem],
+    );
 
   let profile: RunProfile | null = null;
   try {
@@ -371,7 +612,9 @@ async function main(): Promise<void> {
         const dir =
           options.profile ?? (await mkdtemp(join(tmpdir(), `ion-${options.ecosystem}-profile-`)));
         profile = { dir, owned: options.profile === null };
-        if (isBd) {
+        if (usesIndex) {
+          acceptance = await stageShelterIndex(dir, out);
+        } else if (isBd) {
           await stageBdPlugins(dir, acceptance, out);
         } else {
           await stageShelterPlugins(dir, acceptance, out);
@@ -386,7 +629,15 @@ async function main(): Promise<void> {
         );
         if (options.profile !== null) profile = { dir: options.profile, owned: false };
       }
-      const smokeExit = await runSmoke(options, smokeOut, extra, profile);
+      // One line kept per distinct warning: generous for a sweep, which is
+      // where a cap would do the most damage by hiding evidence.
+      const smokeExit = await runSmoke(
+        options,
+        smokeOut,
+        extra,
+        profile,
+        Math.max(100, acceptance.length * 50),
+      );
       process.stdout.write(`[compat] smoke exited ${String(smokeExit)}\n`);
     }
 

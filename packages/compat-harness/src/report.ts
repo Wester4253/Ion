@@ -23,7 +23,7 @@
 
 /** One entry of an ecosystem's acceptance.json. */
 export interface AcceptanceEntry {
-  readonly group: "A" | "B" | "C" | "D";
+  readonly group: "A" | "B" | "C" | "D" | "bulk";
   /** Vencord: the source folder under `vendor/vencord/src/plugins`. */
   readonly folder?: string;
   readonly name: string;
@@ -51,6 +51,12 @@ export interface AcceptanceEntry {
   readonly sha256?: string;
   /** Shelter only: sha256 of `plugin.json`, pinned beside the executable. */
   readonly manifestSha256?: string;
+  /**
+   * Set when the runner deliberately did not stage this entry, carrying the
+   * reason. Scoring such an entry as a failure would blame the adapter for a
+   * file that never arrived; it is deferred, and the reason travels with it.
+   */
+  readonly unstaged?: string;
 }
 
 /** Which compatibility surface a report covers. */
@@ -260,44 +266,56 @@ export function analyze(
     // Tier 1 — load.
     let tier1: TierVerdict = "pass";
     let tier1Reason: string | null = null;
-    if (!registered) {
-      tier1 = "fail";
-      tier1Reason = "did not register — translation failed (see the run's renderer errors)";
-    } else if (state === "failed" || startError !== null) {
-      tier1 = "fail";
-      tier1Reason = `start failed: ${oneLine(startError ?? "unknown error")}`;
-    } else if (errorNotices.length > 0) {
-      tier1 = "fail";
-      tier1Reason = `patch failed: ${errorNotices[0] ?? "unknown notice"}`;
-    }
-
-    // Tier 2 — soak. A measured failure is always claimable; a pass is only
-    // claimed when the run actually soaked long enough.
     let tier2: TierVerdict = "not-run";
     let tier2Reason: string | null = null;
-    if (tier1 === "fail") {
-      tier2 = "fail";
-      tier2Reason = tier1Reason;
-    } else if (pluginRendererErrors.length > 0) {
-      tier2 = "fail";
-      const [firstError = "unknown error"] = pluginRendererErrors;
-      tier2Reason = `uncaught error: ${oneLine(firstError)}`;
-    } else if (tier2Run) {
-      tier2 = "pass";
+
+    if (entry.unstaged !== undefined) {
+      // Never staged, so nothing about it was measured. Scoring it as a
+      // failure would blame the adapter for a file that never arrived.
+      tier1 = "not-run";
+      tier1Reason = entry.unstaged;
+    } else {
+      if (!registered) {
+        tier1 = "fail";
+        tier1Reason = "did not register — translation failed (see the run's renderer errors)";
+      } else if (state === "failed" || startError !== null) {
+        tier1 = "fail";
+        tier1Reason = `start failed: ${oneLine(startError ?? "unknown error")}`;
+      } else if (errorNotices.length > 0) {
+        tier1 = "fail";
+        tier1Reason = `patch failed: ${errorNotices[0] ?? "unknown notice"}`;
+      }
+
+      // Tier 2 — soak. A measured failure is always claimable; a pass is only
+      // claimed when the run actually soaked long enough.
+      if (tier1 === "fail") {
+        tier2 = "fail";
+        tier2Reason = tier1Reason;
+      } else if (pluginRendererErrors.length > 0) {
+        tier2 = "fail";
+        const [firstError = "unknown error"] = pluginRendererErrors;
+        tier2Reason = `uncaught error: ${oneLine(firstError)}`;
+      } else if (tier2Run) {
+        tier2 = "pass";
+      }
     }
 
     const deferred = entry.note?.includes("deferred") ?? false;
-    const outcome: LoadOutcome = !registered
-      ? "not-registered"
-      : tier1 === "fail"
-        ? "failed"
-        : pluginWarnings.length + warnNotices.length > 0
-          ? "loaded-with-warnings"
-          : "loaded";
+    const outcome: LoadOutcome =
+      !registered || entry.unstaged !== undefined
+        ? "not-registered"
+        : tier1 === "fail"
+          ? "failed"
+          : pluginWarnings.length + warnNotices.length > 0
+            ? "loaded-with-warnings"
+            : "loaded";
 
     let status: PluginStatus;
     let reason: string | null;
-    if (tier1 === "fail" || tier2 === "fail") {
+    if (entry.unstaged !== undefined) {
+      status = "deferred";
+      reason = oneLine(entry.unstaged);
+    } else if (tier1 === "fail" || tier2 === "fail") {
       status = "fail";
       reason = oneLine((tier1 === "fail" ? tier1Reason : tier2Reason) ?? "failed");
     } else if (deferred) {
