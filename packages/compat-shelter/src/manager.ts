@@ -110,26 +110,33 @@ function displayNameBase(item: Prepared): string {
 }
 
 /**
- * Gives every entry a display name no other entry is using.
+ * Gives every entry a display name nothing else is using.
  *
  * Two plugins published under one name are two different plugins, and the
  * host refuses a duplicate outright — which used to throw inside `register`,
  * reject `initialize()`, and log `Shelter plugin loading aborted`, dropping
- * every plugin staged behind the collision. A collision now costs the pair a
- * suffix rather than the run.
+ * every plugin staged behind the collision. Measured twice: a pair of
+ * `hello-world` plugins in the index cost forty plugins their verdict, and
+ * a Shelter plugin named `CommandsAPI` — colliding with Vencord's built-in
+ * of the same name — cost another fourteen.
  *
- * The decision is made against the whole set instead of against read order,
- * so the same directory yields the same names on every run: everyone in a
- * shared group is suffixed with its folder, and folders are unique by
- * construction.
+ * The decision is made against the whole set *and* against whatever the host
+//  already holds, so it depends on neither read order nor which adapter
+ * loaded first. Everyone in a contested group is suffixed with its folder,
+ * which is unique by construction.
+ *
+ * @param held display names already taken by plugins registered elsewhere.
  */
-function resolveDisplayNames(prepared: readonly Prepared[]): void {
+function resolveDisplayNames(prepared: readonly Prepared[], held: ReadonlySet<string>): void {
   const seen = new Set<string>();
   const contested = new Set<string>();
   for (const item of prepared) {
     const base = displayNameBase(item);
     if (seen.has(base)) contested.add(base);
     seen.add(base);
+  }
+  for (const name of held) {
+    if (seen.has(name)) contested.add(name);
   }
 
   for (const item of prepared) {
@@ -230,10 +237,15 @@ export class ShelterPluginManager {
     const prepared = (await readStagedPlugins(this.#deps.shell)).map((entry) =>
       this.#prepare(entry),
     );
+    // Names other adapters already hold. Registration order across adapters is
+    // bundle order — core, UI, Vencord, BetterDiscord, Shelter — so Shelter is
+    // rarely the first to want a name, and a Vencord built-in called
+    // `CommandsAPI` is enough to abort this whole loop today.
+    const held = new Set(this.#deps.host.list().map((plugin) => plugin.name));
     // Two passes, and the split is the point: a display name can only be
     // decided once every plugin that wants one is known, so the first pass
     // reads and the second registers under names that no longer collide.
-    resolveDisplayNames(prepared);
+    resolveDisplayNames(prepared, held);
     for (const item of prepared) this.#add(this.#toRecord(item));
     adapterLog(
       "info",

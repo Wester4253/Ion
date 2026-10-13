@@ -180,7 +180,7 @@ export function runSmoke(
         "(() => { const host = document.querySelector('ion-debug-host'); const field = host?.shadowRoot?.querySelector('[data-field=\"webpack\"]'); return field ? field.textContent : null; })()",
       ),
       pluginsStatus: await probe(
-        "window.__ION__ && window.__ION__.plugins ? { status: window.__ION__.plugins.status(), ids: window.__ION__.plugins.list().map(p => `${p.id}:${p.state}`), failures: window.__ION__.plugins.list().filter(p => p.error).map(p => ({ id: p.id, error: p.error })) } : null",
+        "window.__ION__ && window.__ION__.plugins ? { status: window.__ION__.plugins.status(), ids: window.__ION__.plugins.list().map(p => `${p.id}:${p.state}`), failures: window.__ION__.plugins.list().filter(p => p.error).map(p => ({ id: p.id, error: p.error })), names: window.__ION__.plugins.list().reduce((acc, p) => { acc[p.id] = p.name; return acc; }, {}) } : null",
       ),
       debugPanelPlugins: await probe(
         "(() => { const host = document.querySelector('ion-debug-host'); const field = host?.shadowRoot?.querySelector('[data-field=\"plugins\"]'); return field ? field.textContent : null; })()",

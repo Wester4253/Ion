@@ -86,6 +86,16 @@ export interface SmokeReport {
     };
     readonly ids?: readonly string[];
     readonly failures?: readonly { readonly id: string; readonly error: string }[];
+    /**
+     * Host id → the name the plugin actually registered under.
+     *
+     * An adapter may suffix a name to satisfy the host's uniqueness rule
+     * (two published plugins sharing one, or one colliding with another
+     * adapter's), and the console label follows the *registered* name. This
+     * is the host's own answer, so no collision rule has to be duplicated
+     * between an adapter and this file.
+     */
+    readonly names?: Record<string, string>;
   } | null;
   readonly rendererErrors?: readonly string[];
   readonly expectedErrors?: Record<string, number>;
@@ -256,6 +266,13 @@ export function analyze(
   const rendererErrors = smoke.rendererErrors ?? [];
   const warnings = smoke.warnings ?? [];
   const patchStats = smoke.patchStats ?? {};
+  const registeredNames = smoke.pluginsStatus?.names ?? {};
+
+  // What the host registered an entry under, when it registered at all.
+  // Prefer it over the catalog's own name: the adapter is the thing that
+  // decided, and its answer is what the plugin's console label carries.
+  const displayNameOf = (entry: AcceptanceEntry): string =>
+    registeredNames[entry.id ?? entry.name] ?? entry.name;
 
   // Renderer errors are attributed once for the whole run; leftovers become
   // run-level failures (never silently dropped).
@@ -264,8 +281,9 @@ export function analyze(
   {
     let rest = [...rendererErrors];
     for (const entry of acceptance) {
-      const [mine, leftover] = partitionAttributed(rest, entry.name, shelterOrigin(entry.id));
-      if (mine.length > 0) perPluginRendererErrors.set(entry.name, mine);
+      const name = displayNameOf(entry);
+      const [mine, leftover] = partitionAttributed(rest, name, shelterOrigin(entry.id));
+      if (mine.length > 0) perPluginRendererErrors.set(name, mine);
       rest = leftover;
     }
     unattributedRendererErrors.push(...rest);
@@ -275,17 +293,14 @@ export function analyze(
   const plugins: CompatPluginReport[] = [];
 
   for (const entry of acceptance) {
-    const origin = shelterOrigin(entry.id);
-    const [pluginWarnings, leftover] = partitionAttributed(
-      unattributedWarnings,
-      entry.name,
-      origin,
-    );
-    unattributedWarnings = leftover;
-
     // The host keys plugin state by its id; for BetterDiscord plugins that
     // is `bd.<name>` (recorded as `id` in the acceptance entry).
     const hostId = entry.id ?? entry.name;
+    const name = displayNameOf(entry);
+    const origin = shelterOrigin(entry.id);
+    const [pluginWarnings, leftover] = partitionAttributed(unattributedWarnings, name, origin);
+    unattributedWarnings = leftover;
+
     const registered = states.has(hostId);
     const state = states.get(hostId) ?? null;
     const startError = startErrors.get(hostId) ?? null;
@@ -296,7 +311,7 @@ export function analyze(
     const warnNotices = stats.notices
       .filter((notice) => notice.level === "warn")
       .map((notice) => oneLine(notice.message));
-    const pluginRendererErrors = perPluginRendererErrors.get(entry.name) ?? [];
+    const pluginRendererErrors = perPluginRendererErrors.get(name) ?? [];
 
     // Tier 1 — load.
     let tier1: TierVerdict = "pass";
@@ -366,7 +381,9 @@ export function analyze(
     }
 
     plugins.push({
-      name: entry.name,
+      // The host's registered name, so a row reads exactly as the plugin's
+      // own console lines do.
+      name,
       group: entry.group,
       outcome,
       tier1,

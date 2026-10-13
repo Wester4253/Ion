@@ -154,6 +154,31 @@ describe("analyze", () => {
     expect(report.run.unattributedRendererErrors).toEqual([]);
   });
 
+  test("takes the host's registered name over the catalog's when they differ", () => {
+    // Two plugins may publish under one name, or collide with another
+    // adapter's, and the adapter suffixes to satisfy the host. Its answer is
+    // what the plugin's console label carries — taking it here means the
+    // collision rule lives in one place, next to the code that applies it.
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 1, started: 1, failed: 0 },
+          ids: ["shelter.collide:started"],
+          failures: [],
+          names: { "shelter.collide": "Shared (collide)" },
+        },
+        warnings: ["[Shared (collide)] did a thing"],
+      },
+      [{ group: "bulk", name: "Shared", id: "shelter.collide", url: "https://example.com/c/" }],
+      { ...OPTIONS, ecosystem: "shelter", upstream: "live index" },
+    );
+
+    const row = plugin(report, "Shared (collide)");
+    expect(row.warnings).toHaveLength(1);
+    expect(report.run.unattributedWarnings).toEqual([]);
+  });
+
   test("attributes an error by the file it came from, not only by a label", () => {
     // A Content Security Policy refusal carries no plugin label — all the
     // evidence it has is the script that provoked it, which for a Shelter
