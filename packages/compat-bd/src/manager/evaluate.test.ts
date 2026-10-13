@@ -58,10 +58,13 @@ describe("evaluatePluginModule", () => {
   });
 
   it("emits through the ESM default namespace like a transpiled import", () => {
-    // BlurNSFW reaches the emitter as __toESM(require("events")).default.
+    // BlurNSFW does `__toESM(require("events"), 1)` and calls
+    // `new import_events.default()`. For a CommonJS module that helper sets
+    // `default` to `module.exports`, so the export has to *be* the class —
+    // an object carrying its own `default` yields a non-constructor.
     const exported = evaluatePluginModule(
-      `const import_events = require("events");
-       const bus = new import_events.default.EventEmitter();
+      `const import_events = { default: require("events") };
+       const bus = new import_events.default();
        let seen = 0;
        bus.on("tick", () => { seen++; });
        bus.emit("tick");

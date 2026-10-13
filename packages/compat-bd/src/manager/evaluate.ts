@@ -30,6 +30,12 @@ type Listener = (...args: unknown[]) => void;
  * threshold Node applies, and this emitter has none to breach.
  */
 class PageEventEmitter {
+  /**
+   * Node's `events` exposes the exported class as a property of itself, so
+   * `require("events").EventEmitter` resolves for plugins that use that shape.
+   */
+  static readonly EventEmitter = PageEventEmitter;
+
   readonly #listeners = new Map<string, Listener[]>();
 
   /** Mirrors Node: the first `error` listener that is not attached throws. */
@@ -125,13 +131,17 @@ class PageEventEmitter {
  * Upstream maps `events` to Discord's own Node builtins. Ion maps the one
  * builtin the measured plugins load with to the page-side implementation
  * above; every other id still throws with its reason (see THIRD_PARTY.md).
+ *
+ * The shape matters as much as the members: Node's `events` sets
+ * `module.exports` to the EventEmitter class itself, and transpiled plugins
+ * import it as `import EventEmitter from "events"`. esbuild's interop turns a
+ * CommonJS export into `default`, so returning a plain object — with a
+ * hand-written `default` and `__esModule` — made `new import_events.default()`
+ * throw "is not a constructor" in BlurNSFW. Exporting the class restores the
+ * shape every transpiler expects.
  */
-function eventsModule(): Record<string, unknown> {
-  return {
-    EventEmitter: PageEventEmitter,
-    default: { EventEmitter: PageEventEmitter },
-    __esModule: true,
-  };
+function eventsModule(): unknown {
+  return PageEventEmitter;
 }
 
 /** What a BetterDiscord plugin must expose once constructed. */
