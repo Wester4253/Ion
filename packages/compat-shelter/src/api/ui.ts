@@ -1,155 +1,108 @@
 /**
  * `shelter.ui` — Shelter's component library.
  *
- * Two parts, and only one of them is here yet.
+ * The components are `@uwu/shelter-ui` itself: Solid JSX that Ion compiles
+ * with upstream's own toolchain (babel-preset-solid through esbuild), so a
+ * plugin gets the library that ships with shelter rather than a
+ * reimplementation of it (CC0-1.0, see THIRD_PARTY.md). What this file owns
+ * is the *surface*: which of the library's exports a plugin may reach, and
+ * what happens to the ones it may not.
  *
- * `injectCss` and `genId` are reproduced directly (uwu/shelter is CC0-1.0,
- * see THIRD_PARTY.md) because they are pure page bookkeeping with no
- * rendering: a `<style>` appended to the body whose updater replaces or
- * removes it, and a DOM id. Every plugin that injects CSS uses the first.
+ * Two exclusions, both upstream's:
  *
- * Everything else is a component from `@uwu/shelter-ui`, which is Solid JSX
- * that has to be *compiled* — reading it does nothing until a bundler turns
- * it into Solid runtime calls. Until that lands in this adapter, each of
- * those names is a placeholder that throws its own name and the reason when
- * a plugin touches it. Returning `undefined` instead would turn a known
- * gap into "X is not a function", which says nothing; a named error lands
- * on the plugin's own row of the scoreboard with the reason intact.
- *
- * The list below is `@uwu/shelter-ui`'s export list minus the members
- * upstream itself strips from `shelter.ui` (`cleanupCss`, `initToasts`,
- * `injectInternalStyles`, `InternalStyles`), plus the two bridges upstream
- * merges in from `src/bridges.tsx`.
+ * - `cleanupCss`, `initToasts`, `injectInternalStyles` and `InternalStyles`
+ *   are stripped from `shelter.ui` in upstream's `windowApi.ts`, because
+ *   they are startup's own bookkeeping: a plugin that called them could
+ *   tear down the toast container and the styles every other plugin is
+ *   using. The adapter runs them itself while the API is built (see
+ *   `api/index.ts`).
+ * - `ReactInSolidBridge` and `renderSolidInReact` are the two bridges
+ *   upstream merges in from its own `src/bridges.tsx`. They need Discord's
+ *   React instance and are the last piece of stage 2's settings work, so
+ *   they are placeholders for now — throwing their own name and the reason,
+ *   because a plugin that gets `undefined` instead would report "X is not a
+ *   function", which says nothing.
  */
 
-const NOT_COMPILED_YET = [
-  "Button",
-  "ButtonColors",
-  "ButtonLooks",
-  "ButtonSizes",
-  "Checkbox",
-  "CheckboxItem",
-  "ChevronIcon",
-  "DevIcon",
-  "Divider",
-  "ErrorBoundary",
-  "Header",
-  "HeaderTags",
-  "HeaderWeights",
-  "IconAdd",
-  "IconBin",
-  "IconClose",
-  "IconCog",
-  "IconEdit",
-  "IconInfo",
-  "IconUpdate",
-  "IconUpload",
-  "LinkButton",
-  "LocalIcon",
-  "ModalBody",
-  "ModalConfirmFooter",
-  "ModalFooter",
-  "ModalHeader",
-  "ModalRoot",
-  "ModalSizes",
-  "ReactiveRoot",
-  "ReactInSolidBridge",
-  "Slider",
-  "Space",
-  "Switch",
-  "SwitchItem",
-  "SyncIcon",
-  "Text",
-  "TextArea",
-  "TextBox",
-  "TextTags",
-  "TextWeights",
-  "ToastColors",
-  "createPersistenceHelper",
-  "focusring",
-  "getRoot",
-  "niceScrollbarsClass",
-  "openConfirmationModal",
-  "openModal",
-  "renderSolidInReact",
-  "showToast",
-  "tooltip",
-] as const;
+import * as shelterUi from "@uwu/shelter-ui";
+
+/**
+ * Upstream's `without(...)` exclusions. Stripped from `shelter.ui`, called
+ * by the adapter instead.
+ */
+const STARTUP_ONLY = new Set<string>([
+  "cleanupCss",
+  "initToasts",
+  "injectInternalStyles",
+  "InternalStyles",
+]);
+
+/** Upstream's React↔Solid bridges, not compiled in yet. */
+export const PENDING_BRIDGES = ["ReactInSolidBridge", "renderSolidInReact"] as const;
 
 /** Property reads a placeholder must answer instead of throwing. */
 const PASSTHROUGH = new Set<PropertyKey>(["name", "length", "prototype", "constructor"]);
 
-function notCompiled(member: string): never {
+function notAvailable(member: string): never {
   throw new Error(
-    `shelter.ui.${member} is not available: @uwu/shelter-ui is not compiled into ` +
-      `Ion's Shelter adapter yet; see docs/status.md`,
+    `shelter.ui.${member} is not available: it is a React↔Solid bridge that lands with ` +
+      `Ion's settings-section support; see docs/status.md`,
   );
 }
 
 /**
  * A placeholder that fails by name however it is used: called as a
- * component (`SwitchItem(props)`) or indexed as an enum (`ButtonColors.
- * PRIMARY`). Only the reflection properties the runtime itself reads are
- * answered directly, so an error message can still name the value.
+ * component (`ReactInSolidBridge(props)`) or read as a value. Only the
+ * reflection properties the runtime itself reads are answered directly, so
+ * an error message can still name the value.
  */
 function placeholder(member: string): object {
   return new Proxy(() => undefined, {
-    apply: () => notCompiled(member),
+    apply: () => notAvailable(member),
     get: (target, property) => {
       if (typeof property === "symbol" || PASSTHROUGH.has(property)) {
         const reflected: unknown = Reflect.get(target, property);
         return reflected;
       }
-      return notCompiled(member);
+      return notAvailable(member);
     },
   });
 }
 
-/**
- * `shelter.ui.injectCss`: appends a `<style>` to the body and returns an
- * updater — call it with no argument to remove the sheet, or with CSS to
- * replace its contents.
- */
-export function injectCss(css: string): (replacement?: string) => void {
-  const element = document.createElement("style");
-  element.textContent = css;
-  document.body.append(element);
+/** Upstream's `shelter.ui.injectCss`, re-exported so there is one of them. */
+export const { injectCss } = shelterUi;
 
-  return (replacement?: string): void => {
-    if (replacement === undefined) element.remove();
-    else element.textContent = replacement;
-  };
-}
-
-/** `shelter.ui.genId`: a DOM id prefixed so it cannot collide with Discord's. */
-export function genId(): string {
-  return `shltr-ui-${Math.random().toString(36).slice(2)}`;
-}
-
-/** Renders a modal's body; `close` dismisses it, as upstream passes in. */
-export type ModalRender = (props: { readonly close: () => void }) => unknown;
+/** Upstream's `shelter.ui.genId`, re-exported for the same reason. */
+export const { genId } = shelterUi;
 
 /**
- * The `shelter.ui` surface. `injectCss` and `genId` are real; every other
- * member is a placeholder that throws its own name — see the file header.
+ * The `shelter.ui` surface: every `@uwu/shelter-ui` export except the four
+ * startup helpers, plus the two pending bridges as placeholders.
  */
 export interface UiSurface {
-  injectCss: typeof injectCss;
-  genId: typeof genId;
-  /** Throws until `@uwu/shelter-ui` is compiled in. */
-  openModal: (render: ModalRender) => unknown;
+  injectCss: typeof shelterUi.injectCss;
+  genId: typeof shelterUi.genId;
+  /** Opens a Solid modal; available since the library was compiled in. */
+  openModal: typeof shelterUi.openModal;
   [member: string]: unknown;
 }
 
 /**
- * Builds the `shelter.ui` surface. Replaces this file wholesale once
- * `@uwu/shelter-ui` is compiled in — nothing else in the adapter imports
- * from here.
+ * Builds the `shelter.ui` surface from the compiled library.
+ *
+ * Membership is decided by the package's own export list rather than a
+ * hardcoded one, so a library upgrade that adds a component makes it
+ * available to plugins without this file having to notice. The four
+ * startup helpers are removed by name, and `api/ui.test.ts` checks that
+ * this list and the package's exports agree.
  */
 export function createUiSurface(): UiSurface {
-  const surface: Record<string, unknown> = { injectCss, genId };
-  for (const member of NOT_COMPILED_YET) {
-    if (member in surface) continue;
+  const surface: Record<string, unknown> = {};
+  for (const [member, value] of Object.entries(shelterUi)) {
+    if (STARTUP_ONLY.has(member)) continue;
+    surface[member] = value;
+  }
+  for (const member of PENDING_BRIDGES) {
     surface[member] = placeholder(member);
   }
   return surface as UiSurface;

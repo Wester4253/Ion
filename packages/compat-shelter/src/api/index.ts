@@ -25,13 +25,14 @@ import type { SettingsSurface } from "./settings";
 import type { UiSurface } from "./ui";
 import type { UtilSurface } from "./utilapi";
 
+import { initToasts, injectInternalStyles } from "@uwu/shelter-ui";
 import htm from "htm/mini";
 import solidH from "solid-js/h";
 import * as solid from "solid-js";
 import * as solidStore from "solid-js/store";
 import * as solidWeb from "solid-js/web";
 
-import { shelterLog } from "../logger";
+import { adapterLog, errorMessage, shelterLog } from "../logger";
 import { createFluxSurface, findDispatcher } from "./flux";
 import { createHttpSurface } from "./httpapi";
 import { observe } from "./observer";
@@ -77,6 +78,42 @@ export interface ShelterApiDeps {
   readonly plugins: PluginsBridge;
 }
 
+/**
+ * How long to wait for Discord's `#app-mount` before reporting that the
+ * toast container never mounted. Long enough for a cold client on a slow
+ * machine, short enough that a gap shows up in a harness run instead of
+ * looking like a hang.
+ */
+const APP_MOUNT_DEADLINE_MS = 30_000;
+
+/** Poll interval for the app mount; cheap, and it stops once it lands. */
+const APP_MOUNT_POLL_MS = 50;
+
+/**
+ * Resolves with Discord's `#app-mount` once it has a child, which is the
+ * point at which React has rendered and the container can be prepended to
+ * it — upstream's `waitForAppMount`, with a deadline so a mount that never
+ * comes is an error a log can name rather than a promise nobody observes.
+ */
+function waitForAppMount(): Promise<HTMLElement> {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + APP_MOUNT_DEADLINE_MS;
+    const check = (): void => {
+      const mount = document.getElementById("app-mount");
+      if (mount !== null && mount.childElementCount > 0) {
+        resolve(mount);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        reject(new Error("Discord's #app-mount never gained a child"));
+        return;
+      }
+      setTimeout(check, APP_MOUNT_POLL_MS);
+    };
+    check();
+  });
+}
+
 async function buildApi(deps: ShelterApiDeps): Promise<ShelterApiSurface> {
   await deps.discovery.onceReady;
 
@@ -96,6 +133,17 @@ async function buildApi(deps: ShelterApiDeps): Promise<ShelterApiSurface> {
   });
   const ui = createUiSurface();
   const scopedDeps = { flux, http, settings };
+
+  // The component library's own startup, both of them upstream's: its
+  // internal styles, and the toast container mounted into `#app-mount` once
+  // Discord has rendered it. Neither is awaited — the toasts a plugin
+  // raises before the container exists wait in the queue it renders.
+  injectInternalStyles();
+  void waitForAppMount()
+    .then(initToasts)
+    .catch((error: unknown) => {
+      adapterLog("error", `shelter's toast container never mounted: ${errorMessage(error)}`);
+    });
 
   return {
     flux,

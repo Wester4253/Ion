@@ -5,16 +5,17 @@ file is rewritten at each phase boundary, not incrementally patched._
 
 ## Done
 
-| Phase | Deliverable                                        | State                                                                                                                                                                    |
-| ----- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0     | Workspace, strict TS, lint/format/hooks, packaging | Green: clean-clone `pnpm install --frozen-lockfile` builds and tests                                                                                                     |
-| 1     | Desktop shell (Electron, secure window, tray, IPC) | Live-tested on Wayland + NVIDIA: login/app loads, close-to-tray, single instance, screenshare permission path                                                            |
-| 2     | Injection, typed IPC bridge, restricted `require`  | Live-tested: core runs in main world at T+~110ms, debug panel docked next to Discord's settings gear                                                                     |
-| 3     | Webpack discovery + source-text patch engine       | Live-tested: chunk hook intercepts rspack's chain, 6k+ factories wrapped, `findStore("UserStore")` and friends hit                                                       |
-| 4     | Settings store + native plugin host                | Live-tested: bundled `ion.diagnostics` starts at boot (`1/1 started`), toggle/stop/patch-removal paths unit-tested                                                       |
-| 5     | In-Discord UI foundation (settings page)           | Live-tested headlessly: Ion tab injected into the real settings sidebar; panel renders inside Discord's native scroller with native-matched controls (switches, selects) |
-| 6     | Vencord/Equicord adapter + acceptance scoreboard   | Measured: 32/32 plugins load on a logged-out session (30 pass, 1 warnings, 0 fail, 1 deferred) through a 180s Tier 2 soak; generated `docs/compat.md`                    |
-| 7     | BetterDiscord adapter (`BdApi`, plugin/theme load) | Measured: 10-plugin starter set on a logged-out session, 7 pass / 0 warnings / 3 fail / 0 deferred through a 180s Tier 2 soak; generated `docs/compat-bd.md`             |
+| Phase | Deliverable                                        | State                                                                                                                                                                                                                                                                                                                                                              |
+| ----- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0     | Workspace, strict TS, lint/format/hooks, packaging | Green: clean-clone `pnpm install --frozen-lockfile` builds and tests                                                                                                                                                                                                                                                                                               |
+| 1     | Desktop shell (Electron, secure window, tray, IPC) | Live-tested on Wayland + NVIDIA: login/app loads, close-to-tray, single instance, screenshare permission path                                                                                                                                                                                                                                                      |
+| 2     | Injection, typed IPC bridge, restricted `require`  | Live-tested: core runs in main world at T+~110ms, debug panel docked next to Discord's settings gear                                                                                                                                                                                                                                                               |
+| 3     | Webpack discovery + source-text patch engine       | Live-tested: chunk hook intercepts rspack's chain, 6k+ factories wrapped, `findStore("UserStore")` and friends hit                                                                                                                                                                                                                                                 |
+| 4     | Settings store + native plugin host                | Live-tested: bundled `ion.diagnostics` starts at boot (`1/1 started`), toggle/stop/patch-removal paths unit-tested                                                                                                                                                                                                                                                 |
+| 5     | In-Discord UI foundation (settings page)           | Live-tested headlessly: Ion tab injected into the real settings sidebar; panel renders inside Discord's native scroller with native-matched controls (switches, selects)                                                                                                                                                                                           |
+| 6     | Vencord/Equicord adapter + acceptance scoreboard   | Measured: 32/32 plugins load on a logged-out session (30 pass, 1 warnings, 0 fail, 1 deferred) through a 180s Tier 2 soak; generated `docs/compat.md`                                                                                                                                                                                                              |
+| 7     | BetterDiscord adapter (`BdApi`, plugin/theme load) | Measured: 10-plugin starter set on a logged-out session, 7 pass / 0 warnings / 3 fail / 0 deferred through a 180s Tier 2 soak; generated `docs/compat-bd.md`                                                                                                                                                                                                       |
+| 8     | Shelter adapter + bulk scoreboard                  | **In progress.** Starter set measured 9 pass / 1 warnings / 0 fail ([compat-shelter.md](./compat-shelter.md)); index sweep 101 pass / 11 warnings / 18 fail ([compat-shelter-index.md](./compat-shelter-index.md)). Stage 2 (`shelter.ui` = real `@uwu/shelter-ui`, both settings dialogs) is in the tree; stage 3 (settings sections, React↔Solid bridges) is not |
 
 Design details live in [architecture.md](./architecture.md); writing plugins
 against the host in [plugin-authoring.md](./plugin-authoring.md); Linux
@@ -121,7 +122,32 @@ sidebar the two logged-out-limited plugins need does not exist; the settings-tou
 probes (`gearFound`, `ionTabMounted`, …) are likewise expected to be false at
 `/login`. Tier 3 hand-checks are the last column of `compat-bd.md`.
 
-## How to smoke-test today
+## Phase 8 — Shelter adapter (in progress)
+
+**What runs.** `packages/compat-shelter` evaluates a Shelter plugin's source
+against a `shelter` global built to upstream's shapes (`6d42725f`, CC0-1.0;
+every deliberate difference listed in [THIRD_PARTY.md](../THIRD_PARTY.md)).
+Stage 1 measured the 10-plugin starter set at 9 pass / 1 warnings / 0 fail and
+the full index at 101 pass / 11 warnings / 18 fail through 180s Tier 2 soaks.
+
+**Stage 2, just landed.** `shelter.ui` is no longer a stub: `@uwu/shelter-ui`
+0.0.6 — the published library itself, JSX intact — is compiled into the bundle
+with upstream's own `babel-preset-solid` toolchain, and the two settings
+dialogs (`plugin.showSettings()` with its Done footer,
+`plugins.showSettingsFor(id)` awaiting close) are wired through the library's
+`openModal`. Both mount in jsdom, which is the environment that reproduces
+Chromium's custom-element ordering; happy-dom does not, and the reason is
+written into `reactiveroot.test.tsx`. What stage 2 does _not_ do, it says by
+throwing: the two React↔Solid bridges (`ReactInSolidBridge`,
+`renderSolidInReact`) still fail by name, and they land with stage 3's
+settings-section support. The index scoreboard has not been re-run since stage
+2, so the numbers above are stage-1 numbers.
+
+**Known stage-1 failures** (each explained on the scoreboard, none excluded):
+2 `shelter.ui.showToast` (stage 2 should clear these), 3 lifecycle timeouts,
+2 `Failed to fetch`, 2 unreadable plugin stores, and a handful of
+plugin-side bugs that fail upstream too (reading `store.users` before it is
+seeded, for example). No API is loosened to make one pass.
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"   # pnpm 10 location

@@ -14,7 +14,8 @@
         "entry": "src/index.ts",
         "outfile": "dist/index.js",
         "platform": "browser",
-        "format": "iife"
+        "format": "iife",
+        "solid": true
       }
     ]
   },
@@ -25,6 +26,7 @@
   },
   "dependencies": {
     "@ion/core": "workspace:*",
+    "@uwu/shelter-ui": "0.0.6",
     "htm": "^3.1.1",
     "solid-js": "1.6.16",
     "spitroast": "2.2.0"

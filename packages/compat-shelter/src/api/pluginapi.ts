@@ -24,6 +24,7 @@ import type { UiSurface } from "./ui";
 import { runInPluginScope, shelterLog } from "../logger";
 import { createStore, unwrap } from "solid-js/store";
 import { createScopedApi } from "./scoped";
+import { openSettingsModal } from "./settingsmodal";
 
 /** Profile-storage key for one plugin's persisted store. */
 function storageKey(id: string): string {
@@ -103,11 +104,9 @@ export function createPluginApi(options: PluginApiOptions): PluginApi {
     manifest: options.manifest,
     showSettings(): void {
       // Upstream opens a modal titled `Settings - <name>` holding the
-      // plugin's `settings` component above a Done button. `openModal` is
-      // still the placeholder, so this reports the gap by name instead of
-      // doing nothing — see the ui.ts file header.
-      const component = options.getSettings();
-      options.ui.openModal(() => component?.({}));
+      // plugin's `settings` component above a Done button — see
+      // `settingsmodal.tsx`, which builds exactly that.
+      openSettingsModal(options.ui.openModal, options.manifest.name, options.getSettings());
     },
     scoped,
   };

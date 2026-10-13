@@ -23,6 +23,7 @@ import { createSignal } from "solid-js";
 
 import type { ShelterManifest } from "../manifest";
 import type { UiSurface } from "./ui";
+import { openSettingsModalAndWait } from "./settingsmodal";
 
 /** One installed plugin, as upstream's `StoredPlugin` describes it. */
 export interface InstalledEntry {
@@ -96,12 +97,10 @@ export function createPluginsSurface(options: PluginsSurfaceOptions): PluginsSur
       }
 
       const component = entry.settings;
-      // Upstream renders a header, the plugin's component, and a Done button
-      // and resolves once that modal closes; `openModal` is still the
-      // placeholder, so this reports the gap by name instead of waiting —
-      // see the ui.ts file header.
-      options.ui.openModal(() => component({}));
-      return Promise.resolve();
+      // Upstream renders a header, the plugin's component, and no footer —
+      // the dialog's own dismiss closes it — and resolves when the modal
+      // unmounts; `openSettingsModalAndWait` builds exactly that.
+      return openSettingsModalAndWait(options.ui.openModal, entry.manifest.name, component);
     },
 
     editPlugin: () => unavailable("editPlugin"),

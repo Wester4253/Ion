@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build, context } from "esbuild";
+import { solidPlugin } from "esbuild-plugin-solid";
 
 const watch = process.argv.includes("--watch");
 const packageDir = process.cwd();
@@ -20,6 +21,11 @@ const options = bundles.map((bundle) => ({
   // JSX support for packages/ui; plain-TS bundles never see these.
   ...(bundle.jsx === undefined ? {} : { jsx: bundle.jsx }),
   ...(bundle.jsxImportSource === undefined ? {} : { jsxImportSource: bundle.jsxImportSource }),
+  // Solid JSX (compat-shelter, and any dependency that ships JSX) is
+  // compiled by babel-preset-solid before esbuild parses it: Solid needs
+  // its own transform, which esbuild's built-in JSX handling does not do.
+  // Mutually exclusive with the `jsx` options above — babel emits plain JS.
+  ...(bundle.solid === true ? { plugins: [solidPlugin()] } : {}),
   logLevel: "warning",
 }));
 
