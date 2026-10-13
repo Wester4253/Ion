@@ -86,10 +86,10 @@ export default defineConfig(
   {
     files: [
       "packages/ui/**/*.{ts,tsx}",
-      "packages/compat-vencord/**/*.ts",
-      "packages/compat-bd/**/*.ts",
-      "packages/compat-shelter/**/*.ts",
-      "plugins/**/*.ts",
+      "packages/compat-vencord/**/*.{ts,tsx}",
+      "packages/compat-bd/**/*.{ts,tsx}",
+      "packages/compat-shelter/**/*.{ts,tsx}",
+      "plugins/**/*.{ts,tsx}",
     ],
     rules: { "no-restricted-imports": platformNeutralImports() },
   },
