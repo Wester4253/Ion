@@ -88,3 +88,44 @@ on everything unblocked; only truly blocking items stop the run.
 - **Status**: proceeding with (a) to keep the measurement unblocked; the
   scoreboard records exactly how each of the ten fared, and your edit later
   just changes the acceptance file and reruns the harness.
+
+## Q5: Shelter starter set (Phase 8 measurement)
+
+- **Question**: AGENTS.md's compatibility testing rule says each ecosystem gets a
+  5–10 plugin starter set proposed for your approval before bulk work. Here is
+  the proposed Shelter set — approve, edit, or replace: Blur NSFW, Web Keybinds
+  (both SpikeHD), Antitrack, QuickReply Reloaded, Text Replacements (yellowsink),
+  Hidden Channels (xirreal), Channel Typing Indicators (ioj4), Mention Controls
+  (redstonekasi), FreeProfileColors (maisymoe), Back & Forward (netcore).
+- **Why it matters**: these ten anchor the first measured Shelter scoreboard.
+  They come from **seven independent repos** — the live index
+  (`https://shindex.uwu.network/data`) lists 40 repos / 131 plugins — and they
+  span hand-written, Lune-built and esbuild-built sources, so a failure points at
+  a real API gap rather than one author's toolchain. Deliberately excluding the
+  13 Dorion-* plugins, which target a different client entirely.
+- **Options**:
+  1. (a) Proposed: the ten above (index URLs + sha256 in
+     `packages/compat-shelter/acceptance.json`, downloaded and hash-verified by
+     the harness at run time — nothing is vendored).
+  2. (b) Trim to a smaller core for a faster first loop.
+  3. (c) A different list — tell me the names.
+- **Recommended default**: (a).
+- **Status**: proceeding with (a) to keep the measurement unblocked; the
+  scoreboard records exactly how each of the ten fared, and your edit later just
+  changes the acceptance file and reruns the harness.
+
+## Q6: Where Shelter's plugin list comes from
+
+- **Question**: Shelter's plugin list is a live Cloudflare index at
+  `https://shindex.uwu.network/data` (40 repos, 131 plugins). Should the bulk
+  harness treat that as a first-class source?
+- **Why it matters**: AGENTS.md's catalog layer wants multiple live sources, and
+  the bulk harness needs "every plugin available from that source". This is the
+  only authoritative list Shelter itself uses.
+- **Options**:
+  1. (a) Yes — harness and catalog both read it; the index is public, read-only,
+     and returns plain JSON with no auth.
+  2. (b) Only a pinned snapshot committed to the repo (no live reads).
+- **Recommended default**: (a), since AGENTS.md already forbids telemetry and
+  lists catalog fetches as one of Ion's only own network calls.
+- **Status**: proceeding with (a).

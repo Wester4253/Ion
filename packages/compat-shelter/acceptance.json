@@ -1,0 +1,86 @@
+{
+  "source": "https://shindex.uwu.network/data — the live Shelter plugin index (Cloudflare Worker) that shelter.uwu.network/plugins renders; each entry is fetched from its own author's site at run time and hash-verified before staging",
+  "note": "Shelter starter set (5-10 popular real plugins, per AGENTS.md). Owner approval pending in QUESTIONS.md Q5; this is the recommended default and was used to keep moving. Every entry downloads at run time — nothing is vendored into the repository. The index also exposes 131 plugins across 40 repos for the bulk pass.",
+  "entries": [
+    {
+      "group": "A",
+      "name": "Blur NSFW",
+      "id": "shelter.blur-nsfw",
+      "url": "https://spikehd.dev/shelter-plugins/blur-nsfw/",
+      "sha256": "6299824b68bf4cefc3b34f73dee4a0645aeed171fb7e85367cccb7c9c9de6808",
+      "tier3": "Open an NSFW-marked channel: images and videos are blurred and unblur on hover; other channels are untouched."
+    },
+    {
+      "group": "A",
+      "name": "Web Keybinds",
+      "id": "shelter.web-keybinds",
+      "url": "https://spikehd.dev/shelter-plugins/web-keybinds/",
+      "sha256": "79327c03b73ad2a7601b57cdd61488f26fb00825f541fbd609972536cf3ddc17",
+      "tier3": "Set a keybind in shelter's plugin settings and press it in the app; must fire. Confirm Vencord's WebKeybinds is disabled alongside it — the plugin throws if both run."
+    },
+    {
+      "group": "A",
+      "name": "Antitrack",
+      "id": "shelter.antitrack",
+      "url": "https://yellowsink.github.io/shelter-plugins/antitrack/",
+      "sha256": "59ef045e71c87d98af80d803e3d18cdc96b839445e7dde1fb01a54a6dba1dbcb",
+      "tier3": "Open a link that carries tracking parameters and confirm they are stripped before the request leaves."
+    },
+    {
+      "group": "A",
+      "name": "QuickReply Reloaded",
+      "id": "shelter.quickreply",
+      "url": "https://yellowsink.github.io/shelter-plugins/quickreply/",
+      "sha256": "8a6cabe7e241a764ea702f0c5a4a95b4b21ec0f7cdbcf1cfe342ab34c5059c70",
+      "tier3": "Right-click a message → Quick Reply: the reply box appears pre-filled and sends as a reply."
+    },
+    {
+      "group": "A",
+      "name": "Text Replacements",
+      "id": "shelter.text-replacements",
+      "url": "https://yellowsink.github.io/shelter-plugins/text-replacements/",
+      "sha256": "6ce8e407b32627a50f24ae98db7b8d4726ee703f92074c5bf71536b9d41634f6",
+      "tier3": "Create a replacement, send a matching message, and confirm the text is swapped in the composer before sending."
+    },
+    {
+      "group": "A",
+      "name": "Hidden Channels",
+      "id": "shelter.hiddenChannels",
+      "url": "https://shelter.xirreal.dev/hiddenChannels/",
+      "sha256": "e00f6b3e4c731c277d897a5537346b0f847748a25783675c9ccce7d2db449530",
+      "tier3": "With a locked channel visible in the sidebar, open it: the channel renders read-only and is marked hidden."
+    },
+    {
+      "group": "A",
+      "name": "Channel Typing Indicators",
+      "id": "shelter.channel-typing-indicators",
+      "url": "https://ioj4.github.io/shelter-plugins/channel-typing-indicators/",
+      "sha256": "88b771de3b48861ee461356b2504c29d8f7059386f0045937d1dabbd0d21d87b",
+      "tier3": "In a channel where another account is typing, an indicator appears and disappears when they stop."
+    },
+    {
+      "group": "A",
+      "name": "Mention Controls",
+      "id": "shelter.mention-controls",
+      "url": "https://redstonekasi.github.io/shelter-plugins/mention-controls/",
+      "sha256": "2359b735305498339a8db13abf9023b2e58b4a5d5d4962e587c406d8179b58c1",
+      "tier3": "Trigger a mention popup and confirm the controls the plugin adds behave as documented."
+    },
+    {
+      "group": "A",
+      "name": "FreeProfileColors",
+      "id": "shelter.FreeProfileColors",
+      "url": "https://maisymoe.github.io/furniture/FreeProfileColors/",
+      "sha256": "7d83f428467bde71b9f1f3482a8e378c3a593f871af23456cf7e476d0e74a8e4",
+      "tier3": "Open your profile → Edit → theme colors: the plugin's colour pair applies and persists after reload."
+    },
+    {
+      "group": "A",
+      "name": "Back & Forward",
+      "id": "shelter.nav-buttons",
+      "url": "https://netcore10.github.io/shelter-plugins/nav-buttons/",
+      "sha256": "46e893f2bcf7696ca2afdc1e81266e0428756b5f114079c55a614118d2f2215c",
+      "tier3": "Use the plugin's back/forward controls (or its keybinds) to move between two channels and back."
+    }
+  ]
+}

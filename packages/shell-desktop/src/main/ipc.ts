@@ -74,6 +74,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     (file) => readFileSync(file, "utf8"),
     process.env["ION_COMPAT_VENCORD_BUNDLE"],
     process.env["ION_COMPAT_BD_BUNDLE"],
+    process.env["ION_COMPAT_SHELTER_BUNDLE"],
   );
   if (!bundle.ok) {
     console.error(
@@ -88,6 +89,9 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
     if (!bundle.compatBd) {
       console.warn(`[ion] compat-bd bundle not found — BetterDiscord plugins stay disabled`);
+    }
+    if (!bundle.compatShelter) {
+      console.warn(`[ion] compat-shelter bundle not found — Shelter plugins stay disabled`);
     }
   }
   const coreSource = bundle.ok ? bundle.source : "";

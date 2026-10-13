@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   compatBdBundleCandidates,
+  compatShelterBundleCandidates,
   compatVencordBundleCandidates,
   coreBundleCandidates,
   loadCoreBundle,
@@ -59,6 +60,21 @@ describe("compatBdBundleCandidates", () => {
   });
 });
 
+describe("compatShelterBundleCandidates", () => {
+  test("resolves the sibling workspace bundle", () => {
+    const [only] = compatShelterBundleCandidates(undefined, "/repo/packages/shell-desktop/dist");
+    expect(only).toMatch(/packages\/compat-shelter\/dist\/index\.js$/);
+  });
+
+  test("env override takes priority", () => {
+    const [first] = compatShelterBundleCandidates(
+      "/opt/ion/shelter.js",
+      "/repo/packages/shell-desktop/dist",
+    );
+    expect(first).toBe("/opt/ion/shelter.js");
+  });
+});
+
 describe("loadCoreBundle", () => {
   const dist = "/repo/packages/shell-desktop/dist";
 
@@ -75,10 +91,12 @@ describe("loadCoreBundle", () => {
         { name: "ui", candidates: expect.anything() as string[], loaded: false },
         { name: "compat-vencord", candidates: expect.anything() as string[], loaded: false },
         { name: "compat-bd", candidates: expect.anything() as string[], loaded: false },
+        { name: "compat-shelter", candidates: expect.anything() as string[], loaded: false },
       ],
       ui: false,
       compatVencord: false,
       compatBd: false,
+      compatShelter: false,
     });
   });
 
@@ -151,6 +169,30 @@ describe("loadCoreBundle", () => {
       expect(result.source).toBe(
         "core code\n;\nui code\n;\nvencord adapter code\n;\nbd adapter code",
       );
+    }
+  });
+
+  test("appends the compat-shelter bundle after the other adapters", () => {
+    const result = loadCoreBundle(
+      "/opt/ion/core.js",
+      undefined,
+      dist,
+      (file) => {
+        if (file === "/opt/ion/core.js") return "core code";
+        if (file === "/opt/ion/shelter.js") return "shelter adapter code";
+        throw new Error("missing");
+      },
+      undefined,
+      undefined,
+      "/opt/ion/shelter.js",
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.ui).toBe(false);
+      expect(result.compatVencord).toBe(false);
+      expect(result.compatBd).toBe(false);
+      expect(result.compatShelter).toBe(true);
+      expect(result.source).toBe("core code\n;\nshelter adapter code");
     }
   });
 

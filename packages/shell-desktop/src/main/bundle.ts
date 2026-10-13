@@ -4,10 +4,10 @@
  * In development the bundles live in the sibling workspace packages; the
  * loader takes the candidates and the reader as inputs so it stays pure and
  * unit-tested. Environment overrides (`ION_CORE_BUNDLE`, `ION_UI_BUNDLE`,
- * `ION_COMPAT_VENCORD_BUNDLE`, `ION_COMPAT_BD_BUNDLE`) take priority over
- * the sibling lookup. The appended bundles are optional: the shell still
- * runs without them (no settings page, no compat adapters), but the core
- * bundle is required.
+ * `ION_COMPAT_VENCORD_BUNDLE`, `ION_COMPAT_BD_BUNDLE`,
+ * `ION_COMPAT_SHELTER_BUNDLE`) take priority over the sibling lookup. The
+ * appended bundles are optional: the shell still runs without them (no
+ * settings page, no compat adapters), but the core bundle is required.
  *
  * Evaluation order is core → UI → compat adapters: adapters register their
  * translated plugins against the host core already set up.
@@ -35,6 +35,8 @@ export type CoreBundleResult =
       readonly compatVencord: boolean;
       /** True when the BetterDiscord adapter bundle was found and appended. */
       readonly compatBd: boolean;
+      /** True when the Shelter adapter bundle was found and appended. */
+      readonly compatShelter: boolean;
     }
   | { readonly ok: false; readonly tried: readonly string[]; readonly reason: string };
 
@@ -76,6 +78,16 @@ export function compatBdBundleCandidates(
   );
 }
 
+export function compatShelterBundleCandidates(
+  envBundle: string | undefined,
+  shellDistDir: string,
+): string[] {
+  return candidatesFor(
+    envBundle,
+    resolve(shellDistDir, "..", "..", "compat-shelter", "dist", "index.js"),
+  );
+}
+
 type FirstResult =
   | { readonly ok: true; readonly source: string; readonly file: string }
   | { readonly ok: false; readonly tried: readonly string[]; readonly reason: string };
@@ -104,9 +116,9 @@ function loadFirst(candidates: readonly string[], read: (file: string) => string
 
 /**
  * Load the core bundle (required) and append the optional bundles (UI, then
- * the Vencord adapter, then the BetterDiscord adapter) so the shell
- * evaluates everything in one script injection. Missing optional bundles
- * only narrow the feature set; the loader reports which ones landed.
+ * the Vencord, BetterDiscord, and Shelter adapters) so the shell evaluates
+ * everything in one script injection. Missing optional bundles only narrow
+ * the feature set; the loader reports which ones landed.
  */
 export function loadCoreBundle(
   envCoreBundle: string | undefined,
@@ -115,6 +127,7 @@ export function loadCoreBundle(
   read: (file: string) => string,
   envCompatVencordBundle?: string,
   envCompatBdBundle?: string,
+  envCompatShelterBundle?: string,
 ): CoreBundleResult {
   const core = loadFirst(coreBundleCandidates(envCoreBundle, shellDistDir), read);
   if (!core.ok) return core;
@@ -129,6 +142,10 @@ export function loadCoreBundle(
       candidates: compatVencordBundleCandidates(envCompatVencordBundle, shellDistDir),
     },
     { name: "compat-bd", candidates: compatBdBundleCandidates(envCompatBdBundle, shellDistDir) },
+    {
+      name: "compat-shelter",
+      candidates: compatShelterBundleCandidates(envCompatShelterBundle, shellDistDir),
+    },
   ];
 
   const optional: OptionalBundle[] = [];
@@ -148,5 +165,6 @@ export function loadCoreBundle(
     ui: loadedNames.has("ui"),
     compatVencord: loadedNames.has("compat-vencord"),
     compatBd: loadedNames.has("compat-bd"),
+    compatShelter: loadedNames.has("compat-shelter"),
   };
 }
