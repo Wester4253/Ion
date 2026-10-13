@@ -34,6 +34,10 @@ export default defineConfig(
       "**/out/**",
       "**/release/**",
       "**/coverage/**",
+      // Collected bundles: each package's own build output, copied by
+      // scripts/collect-bundles.mjs so the packaged app can find them. They are
+      // linted at their own source, not here.
+      "**/bundles/**",
       // Verbatim upstream copies: provenance and formatting are pinned by
       // `tools/vendor.mjs --check`, not by our lint rules.
       "packages/compat-vencord/vendor/**",

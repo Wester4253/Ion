@@ -38,5 +38,12 @@
   },
   "dependencies": {
     "@ion/core": "workspace:*"
-  }
+  },
+  "main": "dist/main.cjs",
+  "author": {
+    "name": "Ion contributors",
+    "email": "ion@example.invalid"
+  },
+  "desktopName": "Ion",
+  "homepage": "https://github.com/fry-schnetzer/ion"
 }

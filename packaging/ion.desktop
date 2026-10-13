@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Ion
+GenericName=Discord Client Mod
+Comment=A lightweight Discord client mod
+Exec=ion %u
+Icon=ion
+Terminal=false
+StartupWMClass=ion
+Categories=Network;InstantMessaging;
+Keywords=discord;chat;voice;mod;plugins;themes;
+MimeType=x-scheme-handler/discord;
+SingleMainWindow=true
+StartupNotify=true

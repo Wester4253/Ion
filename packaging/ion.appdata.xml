@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Ion contributors -->
+<component type="desktop-application">
+  <id>ion.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>Ion</name>
+  <summary>A lightweight Discord client mod</summary>
+  <description>
+    <p>
+      Ion is a Discord client mod built to run the plugins and themes that
+      already exist: it loads plugins from the Vencord, Equicord, BetterDiscord
+      and Shelter ecosystems, and ships an in-app browser that finds them.
+    </p>
+    <p>
+      Everything runs against a real Discord session in a normal browser
+      context: the client's own code is never modified, and the site is reached
+      the same way any other Electron app would.
+    </p>
+  </description>
+  <launchable type="desktop-id">ion.desktop</launchable>
+  <url type="homepage">https://github.com/fry-schnetzer/ion</url>
+  <url type="vcs-browser">https://github.com/fry-schnetzer/ion</url>
+  <provides>
+    <id>io.desktop.ion</id>
+  </provides>
+  <releases>
+    <release version="0.0.0" date="2026-10-13">
+      <description>
+        <p>Initial packaged release.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+    <content_attribute id="social-info">mild</content_attribute>
+  </content_rating>
+</component>

@@ -11,14 +11,20 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "start": "pnpm --filter @ion/shell-desktop start",
     "dev": "pnpm -r --parallel dev",
-    "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
-    "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "icons": "node packages/shell-desktop/assets/generate.mjs --size 1024 --out packages/shell-desktop/build/icon.png",
+    "lint": "eslint .",
+    "package": "pnpm build && node scripts/collect-bundles.mjs && pnpm --filter @ion/shell-desktop exec electron-builder --config electron-builder.yml",
+    "package:arch": "makepkg -C -f -p packaging/PKGBUILD",
+    "package:arch:install": "sudo pacman -U packaging/ion-*.pkg.tar.zst",
+    "package:linux": "pnpm package -- --linux",
+    "package:win": "pnpm package -- --win",
+    "prepare": "simple-git-hooks",
+    "start": "pnpm --filter @ion/shell-desktop start",
     "test": "vitest run",
-    "prepare": "simple-git-hooks"
+    "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged"
@@ -45,6 +51,7 @@
     "@types/babel__core": "^7.20.5",
     "@types/node": "^22.19.0",
     "babel-preset-solid": "1.6.16",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "esbuild-plugin-solid": "^0.5.0",
     "eslint": "^10.12.0",

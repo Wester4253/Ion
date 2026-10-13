@@ -6,3 +6,10 @@ coverage/
 compat-runs/
 *.tsbuildinfo
 .DS_Store
+.arch-pkg/
+packaging/*.pkg.tar.zst
+packaging/*.AppImage
+packaging/*.deb
+.pnpm-store/
+packages/shell-desktop/bundles/
+packages/shell-desktop/build/

@@ -1,0 +1,128 @@
+# electron-builder configuration for the Ion desktop shell.
+#
+# Two things here are unusual and both are deliberate:
+#
+# 1. The app's pluggable parts (core, ui and the three compat adapters) are
+#    loaded as sibling bundles rather than compiled into the main process.
+#    `scripts/collect-bundles.mjs` copies each package's build output into
+#    `packages/shell-desktop/bundles/`, which is what `files` ships. That
+#    keeps the shell's own bundle tiny and lets an adapter be rebuilt and
+#    re-shipped without repackaging the app.
+# 2. `electronUpdaterCompatibility` is set for the target version, so the
+#    generated `latest.yml`/`latest-mac.json` matches what a future updater
+#    would read. The update check itself is not wired (see QUESTIONS.md Q7).
+
+appId: network.ion.client
+productName: Ion
+copyright: GPL-3.0-only
+
+# The package is `@ion/shell-desktop`, and electron-builder would otherwise
+# turn that into the on-disk executable name — a path it refuses to create.
+# The installed binary is `ion`, lowercase, the way a packaged app's is.
+executableName: ion
+
+# The app entry (`dist/main.cjs`) and `author` live in package.json, because
+# electron-builder reads both from there — the `main` key is not part of this
+# file's schema. `type: "module"` there is for the workspace tooling; the shell
+# itself is a CommonJS bundle, which is what package.json's `main` names.
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/main.cjs
+  - dist/preload.cjs
+  - assets/icon.png
+  - "bundles/**"
+  # The shell only imports @ion/core for types, which esbuild erases, so the
+  # workspace copy electron-builder would otherwise pull into the app file
+  # (source, maps and all) is dead weight.
+  - "!node_modules"
+
+# Icon sources: `build/icon.png` is the 1024×1024 master; electron-builder
+# derives the `.ico` and the individual Linux sizes from it. It is generated
+# by `assets/generate.mjs`, so the artwork is in the repository rather than
+# in binary form.
+icon: build/icon.png
+
+linux:
+  # The window's WM_CLASS has to match the shipped desktop entry, or the
+  # taskbar cannot associate a running window with the app's launcher.
+  syncDesktopName: true
+  # Arch packages come from packaging/PKGBUILD, not from electron-builder:
+  # its pacman installer writes to /opt/Ion, which is not the Arch layout and
+  # puts the desktop entry and icons where no Arch desktop theme will find
+  # them. The AppImage and deb are for the other distros.
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  category: Network;InstantMessaging
+  synopsis: A lightweight Discord client mod
+  description: >-
+    Ion loads plugins and themes from the Vencord, Equicord, BetterDiscord and
+    Shelter ecosystems, and ships with an in-app browser for them.
+  desktop:
+    entry:
+      Name: Ion
+      Comment: A lightweight Discord client mod
+      StartupWMClass: Ion
+      Categories: Network;InstantMessaging
+
+# The deb and PKGBUILD both need dependency metadata. Both repos' docs list
+# these as the runtime set for an Electron client with PipeWire screenshare.
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+  # AppStream metadata for software centers.
+  packageCategory: net
+  compression: xz
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  # The app user model ID that groups the launcher and taskbar entries is set
+  # by the shell itself, before any window is created, so electron-builder is
+  # not asked to inject it.
+  artifactName: Ion-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  menuCategory: false
+  # GPL-3.0: shipping the license text with the installer is required.
+  license: LICENSE
+  uninstallDisplayName: Ion
+
+portable:
+  artifactName: Ion-${version}-portable-${arch}.${ext}
+
+# macOS is not supported. Nothing is configured on purpose: no target, no
+# identity, so no macOS artifact can be requested by accident. See
+# docs/linux.md.
+
+artifactName: Ion-${version}-${os}-${arch}.${ext}
+
+compression: maximum
+# No custom download mirror: the default is GitHub's own release host, and an
+# override here silently changes what every binary is linked against.
+publish:
+  # Present so the generated latest.yml is well-formed; nothing reads it yet.
+  provider: generic
+  url: https://ion-download.example.invalid/latest

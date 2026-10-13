@@ -56,48 +56,74 @@ function candidatesFor(envBundle: string | undefined, devSibling: string): strin
   return envBundle ? [envBundle, devSibling] : [devSibling];
 }
 
+/**
+ * Where a bundle lands inside a packaged app.
+ *
+ * The shell resolves its siblings by the repository layout
+ * (`shellDistDir/../../core/dist/index.js`), which does not survive
+ * packaging: inside the app file the shell's `dist` sits beside a
+ * `bundles/<name>/` directory that `scripts/collect-bundles.mjs` fills from
+ * every package's own build output. The dev sibling stays the earlier
+ * candidate, so a checkout keeps working untouched.
+ */
+function packagedCandidate(shellDistDir: string, name: string): string {
+  return resolve(shellDistDir, "..", "bundles", name, "index.js");
+}
+
 export function coreBundleCandidates(
   envBundle: string | undefined,
   shellDistDir: string,
 ): string[] {
-  return candidatesFor(envBundle, resolve(shellDistDir, "..", "..", "core", "dist", "index.js"));
+  return [
+    ...candidatesFor(envBundle, resolve(shellDistDir, "..", "..", "core", "dist", "index.js")),
+    packagedCandidate(shellDistDir, "core"),
+  ];
 }
 
 export function uiBundleCandidates(
   envUiBundle: string | undefined,
   shellDistDir: string,
 ): string[] {
-  return candidatesFor(envUiBundle, resolve(shellDistDir, "..", "..", "ui", "dist", "index.js"));
+  return [
+    ...candidatesFor(envUiBundle, resolve(shellDistDir, "..", "..", "ui", "dist", "index.js")),
+    packagedCandidate(shellDistDir, "ui"),
+  ];
 }
 
 export function compatVencordBundleCandidates(
   envBundle: string | undefined,
   shellDistDir: string,
 ): string[] {
-  return candidatesFor(
-    envBundle,
-    resolve(shellDistDir, "..", "..", "compat-vencord", "dist", "index.js"),
-  );
+  return [
+    ...candidatesFor(
+      envBundle,
+      resolve(shellDistDir, "..", "..", "compat-vencord", "dist", "index.js"),
+    ),
+    packagedCandidate(shellDistDir, "compat-vencord"),
+  ];
 }
 
 export function compatBdBundleCandidates(
   envBundle: string | undefined,
   shellDistDir: string,
 ): string[] {
-  return candidatesFor(
-    envBundle,
-    resolve(shellDistDir, "..", "..", "compat-bd", "dist", "index.js"),
-  );
+  return [
+    ...candidatesFor(envBundle, resolve(shellDistDir, "..", "..", "compat-bd", "dist", "index.js")),
+    packagedCandidate(shellDistDir, "compat-bd"),
+  ];
 }
 
 export function compatShelterBundleCandidates(
   envBundle: string | undefined,
   shellDistDir: string,
 ): string[] {
-  return candidatesFor(
-    envBundle,
-    resolve(shellDistDir, "..", "..", "compat-shelter", "dist", "index.js"),
-  );
+  return [
+    ...candidatesFor(
+      envBundle,
+      resolve(shellDistDir, "..", "..", "compat-shelter", "dist", "index.js"),
+    ),
+    packagedCandidate(shellDistDir, "compat-shelter"),
+  ];
 }
 
 type FirstResult =

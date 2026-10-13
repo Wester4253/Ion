@@ -27,6 +27,29 @@ describe("coreBundleCandidates", () => {
   });
 });
 
+describe("packaged bundle candidates", () => {
+  test("every candidate helper also offers the packaged path", () => {
+    const dist = "/repo/packages/shell-desktop/dist";
+    for (const [name, candidates] of [
+      ["core", coreBundleCandidates(undefined, dist)],
+      ["ui", uiBundleCandidates(undefined, dist)],
+      ["compat-vencord", compatVencordBundleCandidates(undefined, dist)],
+      ["compat-bd", compatBdBundleCandidates(undefined, dist)],
+      ["compat-shelter", compatShelterBundleCandidates(undefined, dist)],
+    ] as const) {
+      expect(candidates.at(-1)).toBe(`/repo/packages/shell-desktop/bundles/${name}/index.js`);
+    }
+  });
+
+  test("the dev sibling stays ahead of the packaged path, and the env override first", () => {
+    const dist = "/repo/packages/shell-desktop/dist";
+    const candidates = coreBundleCandidates("/opt/ion/core.js", dist);
+    expect(candidates[0]).toBe("/opt/ion/core.js");
+    expect(candidates).toContain("/repo/packages/core/dist/index.js");
+    expect(candidates.at(-1)).toBe("/repo/packages/shell-desktop/bundles/core/index.js");
+  });
+});
+
 describe("uiBundleCandidates", () => {
   test("resolves the sibling workspace bundle", () => {
     const [only] = uiBundleCandidates(undefined, "/repo/packages/shell-desktop/dist");
@@ -235,7 +258,10 @@ describe("loadCoreBundle", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.tried).toHaveLength(2);
+      // The core bundle is loaded first; it reports its env override, its dev
+      // sibling and its packaged candidate, and a failure there stops the run
+      // before any optional bundle is attempted.
+      expect(result.tried).toHaveLength(3);
       expect(result.reason).toBe("EACCES");
     }
   });

@@ -1,0 +1,151 @@
+# Maintainer: Ion contributors <ion@example.invalid>
+#
+# Ion — a lightweight Discord client mod (Electron).
+#
+# This is the Arch/CachyOS package. It builds from source, like any other AUR
+# package: `makepkg -si` in an unpacked clone (or an AUR checkout of this file).
+# There is no /opt involved — the app lives in /usr/lib/ion with a /usr/bin/ion
+# launcher, which is the Arch layout and what makes the desktop entry, the icons
+# and the launcher all belong to the package.
+#
+# CachyOS note: Arch's x86_64 packages run everywhere. CachyOS also publishes
+# x86_64_v3 (AVX2) builds; set ION_TARGET_ARCH below to x86_64_v3 to make pacman
+# refuse to install on hardware without AVX2, and everything else stays the same.
+
+pkgbase=ion
+pkgname=ion
+pkgver=0.0.0
+pkgrel=1
+pkgdesc='A lightweight Discord client mod that loads Vencord, Equicord, BetterDiscord and Shelter plugins'
+arch=(x86_64)
+url='https://github.com/fry-schnetzer/ion'
+license=(GPL-3.0-only)
+depends=(
+  c-ares
+  gtk3
+  libcups
+  libdrm
+  libnotify
+  libpulse
+  libxcomposite
+  libxdamage
+  libxfixes
+  libxkbcommon
+  libxrandr
+  libxss
+  libxtst
+  mesa
+  nss
+)
+makedepends=(
+  git
+  nodejs
+  npm # pnpm's installer is not in the Arch repos; the build bootstraps it
+  pnpm
+)
+optdepends=(
+  'pipewire: screen sharing with casting and portal capture'
+  'xdg-desktop-portal: screen sharing on Wayland'
+  'libappindicator-gtk3: tray icon'
+)
+provides=(ion)
+conflicts=(ion-bin)
+install=ion.install
+# Electron's shipped binaries must not be stripped: `strip` removes symbols they
+# resolve at runtime, and the app then fails to start. The .so files inside are
+# already as stripped as upstream ships them.
+options=(!strip !debug emptydirs)
+# Verification against the local working tree — how a packaging change is tested
+# before it is pushed. makepkg takes *files* as sources, not directories, so
+# scripts/package-arch.mjs packs the tree into a tarball whose top-level folder
+# is `ion` (matching pkgbase) and names it here. Without ION_TARBALL the package
+# clones from GitHub, which is the published AUR path.
+if [[ -n ${ION_TARBALL:-} ]]; then
+  source=("$ION_TARBALL")
+  b2sums=(SKIP)
+else
+  source=("git+${url}.git")
+  b2sums=(SKIP)
+fi
+
+pkgver() {
+  # The version comes from the repository itself, not from the archive: the
+  # tarball path has no git history, so a locally built package would otherwise
+  # be stuck at 0.0.0 forever.
+  local repo="${ION_SRC:-$srcdir/$pkgbase}"
+  cd "$repo" || return 1
+  if [[ -n ${ION_TARBALL:-} ]]; then
+    printf '0.r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    return 0
+  fi
+  # `git describe`'s tag, or the commit: a version that no tag has ever claimed
+  # is still a version, and is better than the 0.0.0 a packaged tarball would
+  # otherwise install forever.
+  git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' ||
+    printf '0.r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$srcdir/$pkgbase"
+
+  # npm/pnpm store their caches under $HOME; a build in a clean container would
+  # otherwise fail on a read-only home directory.
+  export PNPM_HOME="${PNPM_HOME:-$srcdir/.pnpm-home}"
+  export npm_config_cache="${npm_config_cache:-$srcdir/.npm-cache}"
+
+  # The workspace is a pnpm workspace with a pinned lockfile: a clean-clone
+  # install is exactly what CI runs, so the build is reproducible.
+  pnpm install --frozen-lockfile
+  pnpm build
+
+  # The app's pluggable parts are sibling bundles; scripts/collect-bundles.mjs
+  # copies them into packages/shell-desktop/bundles/ where the shell finds them
+  # (see main/bundle.ts`` `packagedCandidate`).
+  node scripts/collect-bundles.mjs
+
+  # Packaging sources: the 1024px master icon everything else derives from.
+  pnpm icons
+
+  # `--dir` produces the unpackable Electron tree (electron binary + the app
+  # file) without wrapping it in a distro-specific installer; `install` below
+  # lays it out the Arch way, which is why this package does not use
+  # electron-builder's /opt installer output.
+  # electron-builder is a workspace devDependency, so its binary is in the
+  # root's node_modules/.bin rather than on the build PATH. The subshell matters
+  # as well as the PATH: run from anywhere but packages/shell-desktop, it reads
+  # the workspace's root package.json instead of the app's, and finds neither the
+  # author nor the electron dependency.
+  (
+    cd packages/shell-desktop
+    PATH="$PWD/../../node_modules/.bin:$PATH" electron-builder --config electron-builder.yml --dir
+  )
+}
+
+package() {
+  cd "$srcdir/$pkgbase"
+
+  install -dm755 "$pkgdir/usr/lib/ion"
+  cp -a --no-preserve=ownership packages/shell-desktop/release/linux-unpacked/. \
+    "$pkgdir/usr/lib/ion/"
+
+  # The launcher is an absolute symlink, so it keeps working however the tree
+  # is moved or bind-mounted, and it is what the desktop entry and the shell use.
+  install -dm755 "$pkgdir/usr/bin"
+  ln -sf '/usr/lib/ion/ion' "$pkgdir/usr/bin/ion"
+
+  # One icon at each size the hicolor theme is looked up at; the drawing is
+  # scale-free, so these are one shape, not nine assets. The packaging master in
+  # build/ is not installed — it is the source these come from.
+  for size in 16 24 32 48 64 96 128 256 512; do
+    node packages/shell-desktop/assets/generate.mjs --size "$size" --out \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/ion.png"
+  done
+
+  install -Dm644 packaging/ion.desktop "$pkgdir/usr/share/applications/ion.desktop"
+  install -Dm644 packaging/ion.appdata.xml "$pkgdir/usr/share/metainfo/ion.appdata.xml"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  # The pacman package ships libpkcs11 and other bundled modules under its own
+  # dir; the app's own files are already in /usr/lib/ion, so nothing else is
+  # needed on the path.
+}
