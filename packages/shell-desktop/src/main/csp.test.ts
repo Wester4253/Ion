@@ -5,8 +5,9 @@ import { applyCspGrants, parsePolicy, patchPolicy } from "./csp";
 const DISCORD_POLICY =
   "default-src 'self'; connect-src https://discord.com https://status.discord.com; img-src 'self' blob: https://cdn.discordapp.com; upgrade-insecure-requests";
 
-/** Grants in table order: `*.vencord.dev`, then the two GitHub hosts, then userpfp's. */
-const CONNECT_GRANTS = "*.vencord.dev raw.githubusercontent.com userpfp.github.io";
+/** Grants in table order: `*.vencord.dev`, then the two GitHub hosts, userpfp's, then loopback. */
+const CONNECT_GRANTS =
+  "*.vencord.dev raw.githubusercontent.com userpfp.github.io ws://localhost:* http://localhost:*";
 const IMG_GRANTS = "*.vencord.dev raw.githubusercontent.com";
 
 /** The exact rewrite of DISCORD_POLICY: grants appended, order and separators preserved. */
@@ -64,6 +65,25 @@ describe("patchPolicy", () => {
     const directives = parsePolicy(patchPolicy(DISCORD_POLICY));
     expect(directives.get("img-src")).not.toContain("userpfp.github.io");
     expect(directives.get("connect-src")).toContain("userpfp.github.io");
+  });
+
+  test("grants loopback spelled the way Discord's policy omits", () => {
+    // Both Intiface plugins connect to ws://localhost:<port>, and the default
+    // policy allows the same loopback only as 127.0.0.1.
+    const directives = parsePolicy(patchPolicy(DISCORD_POLICY));
+    expect(directives.get("connect-src")).toContain("ws://localhost:*");
+    expect(directives.get("connect-src")).toContain("http://localhost:*");
+    expect(directives.get("img-src")).not.toContain("ws://localhost:*");
+  });
+
+  test("grants no host outside the table", () => {
+    // The allowlist is the whole point: everything else stays blocked, and a
+    // plugin whose fetch is refused should have to come back here to be fixed.
+    const directives = parsePolicy(patchPolicy(DISCORD_POLICY));
+    const granted = new Set([...(directives.get("connect-src") ?? [])]);
+    for (const host of ["cdn.jsdelivr.net", "github.com", "evil.example"]) {
+      expect(granted.has(host)).toBe(false);
+    }
   });
 });
 

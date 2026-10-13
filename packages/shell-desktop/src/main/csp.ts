@@ -45,6 +45,12 @@ const CSP_GRANTS: readonly (readonly [source: string, directives: readonly strin
   ["raw.githubusercontent.com", ["connect-src", "img-src"]],
   // userpfp's own manifest host (source/data.json); it serves no images.
   ["userpfp.github.io", ["connect-src"]],
+  // Loopback spelled `localhost`, which Discord's own policy permits as
+  // `ws://127.0.0.1:*` / `http://127.0.0.1:*`. Both Intiface plugins drive
+  // their service over `ws://localhost:<port>` and were refused by the host
+  // spelling alone — the same machine either way.
+  ["ws://localhost:*", ["connect-src"]],
+  ["http://localhost:*", ["connect-src"]],
 ];
 
 const REPORT_ONLY_HEADER = "content-security-policy-report-only";

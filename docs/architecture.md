@@ -67,11 +67,12 @@ violations patched plugins cause on purpose), and appends a strict allowlist.
 Every grant names its consumer, so the whole set of external hosts Ion lets
 Discord's document reach is reviewable in one table.
 
-| Grant                       | Directives               | Consumer                                                       |
-| --------------------------- | ------------------------ | -------------------------------------------------------------- |
-| `*.vencord.dev`             | `connect-src`, `img-src` | BadgeAPI's badges and their images (upstream grants the same). |
-| `raw.githubusercontent.com` | `connect-src`, `img-src` | tarp's theme list and userpfp's avatar files.                  |
-| `userpfp.github.io`         | `connect-src`            | userpfp's manifest (`source/data.json`); it serves no images.  |
+| Grant                       | Directives               | Consumer                                                                                                              |
+| --------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `*.vencord.dev`             | `connect-src`, `img-src` | BadgeAPI's badges and their images (upstream grants the same).                                                        |
+| `raw.githubusercontent.com` | `connect-src`, `img-src` | tarp's theme list and userpfp's avatar files.                                                                         |
+| `userpfp.github.io`         | `connect-src`            | userpfp's manifest (`source/data.json`); it serves no images.                                                         |
+| `ws://localhost:*`          | `connect-src`            | Plugins driving a local service by hostname (Intiface); Discord's own policy permits the same machine as `127.0.0.1`. |
 
 The last two are **a deliberate deviation from stock Discord**, which blocks
 both hosts: a plugin that fetches its data from GitHub would otherwise fail
