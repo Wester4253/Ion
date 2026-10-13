@@ -29,7 +29,7 @@ import type { ShelterManifest } from "./manifest";
 import type { PluginScope } from "./logger";
 
 import { createPluginApi } from "./api/pluginapi";
-import { adapterLog, errorMessage, runInPluginScope } from "./logger";
+import { adapterLog, errorMessage, runInPluginScope, shelterLog } from "./logger";
 import { evaluateShelterPlugin } from "./evaluate";
 import { parseManifest } from "./manifest";
 import {
@@ -298,13 +298,25 @@ export class ShelterPluginManager {
     // The per-plugin edition: upstream spreads the window API and adds
     // `plugin`, so a plugin's `shelter.plugin` is its own store and scope
     // while every other member is shared.
-    const evaluated = evaluateShelterPlugin(ready.js, ready.folder, {
-      ...api,
-      plugin: pluginApi,
-    });
+    //
+    // Recorded before evaluation: a file that registers a patch and *then*
+    // throws has to have that patch cleaned up by the same path that handles
+    // a failing `onLoad`, and until now it would have leaked it.
     ready.pluginApi = pluginApi;
 
+    let evaluated: ShelterPluginExport | undefined;
     try {
+      // Evaluation runs under the plugin's scope — a `log` call in a module
+      // body belongs to the plugin that made it, not to the adapter.
+      evaluated = runInPluginScope(ready.scope, () => {
+        const evaluation = evaluateShelterPlugin(ready.js, ready.folder, {
+          ...api,
+          plugin: pluginApi,
+        });
+        if (evaluation.note !== null) shelterLog(evaluation.note, "warn");
+        return evaluation.plugin;
+      });
+
       const onLoad = evaluated.onLoad;
       if (onLoad !== undefined) {
         await runScoped(ready.scope, `onLoad for ${ready.manifest.name}`, onLoad);
@@ -324,9 +336,16 @@ export class ShelterPluginManager {
     await this.#teardown(record, evaluated);
   }
 
-  /** Upstream's `stopPlugin`: unload, then drop every scoped registration. */
-  async #teardown(record: ReadyRecord, evaluated: ShelterPluginExport): Promise<void> {
-    const onUnload = evaluated.onUnload;
+  /**
+   * Upstream's `stopPlugin`: unload, then drop every scoped registration.
+   *
+   * `evaluated` may be undefined when the file itself threw part way through
+   * evaluation — after it had already registered something. The registrations
+   * still have to go, which is the whole reason this is not simply
+   * `onUnload?.()`.
+   */
+  async #teardown(record: ReadyRecord, evaluated: ShelterPluginExport | undefined): Promise<void> {
+    const onUnload = evaluated?.onUnload;
     try {
       if (onUnload !== undefined) {
         await runScoped(record.scope, `onUnload for ${record.manifest.name}`, onUnload);

@@ -27,8 +27,29 @@ export interface ShelterPluginExport {
   readonly settings?: ((props: Record<string, unknown>) => unknown) | undefined;
 }
 
+/** What one plugin file produced, plus anything odd about it. */
+export interface ShelterPluginEvaluation {
+  /**
+   * The plugin object — empty when the file evaluated to nothing, which
+   * shelter's own loader tolerates: it spreads the result (`{ ...undefined }`
+   * is `{}`) and calls `onLoad?.()`, so a plugin written to do all of its
+   * work while being evaluated installs its patches and interceptors in the
+   * module body and has no hooks to call afterwards.
+   */
+  readonly plugin: ShelterPluginExport;
+  /**
+   * A one-line observation to report under the plugin, or null when there is
+   * nothing to say. Set rather than thrown for the case above: such a plugin
+   * loads exactly as it does upstream, so failing it would blame it for our
+   * strictness — but "started with no lifecycle hooks" belongs on the record
+   * rather than being hidden by a silent `{}`.
+   */
+  readonly note: string | null;
+}
+
 /** Names a value for a failure message without printing its contents. */
 function describeValue(value: unknown): string {
+  if (value === undefined) return "undefined";
   if (value === null) return "null";
   if (Array.isArray(value)) return "an array";
   return `a ${typeof value}`;
@@ -44,7 +65,7 @@ export function evaluateShelterPlugin(
   js: string,
   folder: string,
   api: unknown,
-): ShelterPluginExport {
+): ShelterPluginEvaluation {
   const source = `shelter=>{return ${js}}\n//# sourceURL=s://!SHELTER/${folder}`;
   const wrapper = (0, eval)(source) as (shelter: unknown) => unknown;
 
@@ -53,7 +74,17 @@ export function evaluateShelterPlugin(
   }
 
   const produced = wrapper(api);
-  if (typeof produced !== "object" || produced === null || Array.isArray(produced)) {
+
+  if (produced === undefined || produced === null) {
+    return {
+      plugin: {},
+      note:
+        `plugin.js evaluated to ${describeValue(produced)} — no lifecycle hooks, ` +
+        `so everything it does happened while it was being evaluated`,
+    };
+  }
+
+  if (typeof produced !== "object" || Array.isArray(produced)) {
     throw new Error(
       `plugin.js evaluated to ${describeValue(produced)}, expected an object with onLoad/onUnload`,
     );
@@ -67,5 +98,5 @@ export function evaluateShelterPlugin(
     }
   }
 
-  return plugin;
+  return { plugin, note: null };
 }

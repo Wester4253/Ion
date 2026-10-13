@@ -8,17 +8,29 @@
 import { describe, expect, it } from "vitest";
 import type { IonDiscoveryApi } from "@ion/core";
 
-import { createFluxSurface, findDispatcher, type DispatchPayload, type Dispatcher } from "./flux";
+import {
+  createFluxSurface,
+  findDispatcher,
+  installInterceptor,
+  type DispatchPayload,
+  type Dispatcher,
+  type Interceptor,
+} from "./flux";
 
 /** The lookup key `filters.byStoreName` produced, readable by the fake. */
 interface StoreFilter {
   readonly store: string;
 }
 
-function fakeDiscovery(): { api: IonDiscoveryApi; stores: Map<string, unknown> } {
+function fakeDiscovery(modules: readonly unknown[] = []): {
+  api: IonDiscoveryApi;
+  stores: Map<string, unknown>;
+} {
   const stores = new Map<string, unknown>();
   const api = {
     find: (filter: unknown) => stores.get((filter as StoreFilter).store),
+    findAll: (filter: unknown) =>
+      modules.filter((value) => (filter as (value: unknown, id: string) => boolean)(value, "")),
     filters: { byStoreName: (name: string): StoreFilter => ({ store: name }) },
     waitFor: (filter: unknown, listener: (exports: unknown) => void) => {
       const found = stores.get((filter as StoreFilter).store);
@@ -33,12 +45,15 @@ function fakeDiscovery(): { api: IonDiscoveryApi; stores: Map<string, unknown> }
 function fakeDispatcher(): Dispatcher & { fire(payload: DispatchPayload): boolean } {
   return {
     _interceptors: [],
+    _actionHandlers: new Map(),
+    _subscriptions: new Map(),
     dispatch: () => Promise.resolve(),
     subscribe: () => undefined,
     unsubscribe: () => undefined,
     fire(payload) {
       let blocked = false;
-      for (const interceptor of this._interceptors ?? []) {
+      const list: readonly unknown[] = Array.isArray(this._interceptors) ? this._interceptors : [];
+      for (const interceptor of list) {
         if ((interceptor as (p: DispatchPayload) => unknown)(payload) === true) blocked = true;
       }
       return blocked;
@@ -46,12 +61,61 @@ function fakeDispatcher(): Dispatcher & { fire(payload: DispatchPayload): boolea
   };
 }
 
-describe("findDispatcher", () => {
-  it("rejects a module that is not a dispatcher, naming the props it sought", () => {
-    const { api } = fakeDiscovery();
-    (api as unknown as { findByProps: () => unknown }).findByProps = () => ({});
+/**
+ * A candidate for the dispatcher. Discord's i18n message table exports
+ * `dispatch` and `subscribe` as message functions, and answers to *any* other
+ * key with one too — the shape that first made this lookup hand a plugin the
+ * wrong object.
+ */
+function candidate(fields: Record<string, unknown>): Record<string, unknown> {
+  return {
+    dispatch: () => Promise.resolve(),
+    subscribe: () => undefined,
+    ...fields,
+  };
+}
 
-    expect(() => findDispatcher(api)).toThrow(/a module exposing dispatch \+ subscribe/);
+describe("findDispatcher", () => {
+  it("takes the module carrying the dispatcher's own registries", () => {
+    const dispatcher = candidate({ _actionHandlers: new Map() });
+    // Present but wrong, and searched for first — the registries decide it.
+    const messageTable = candidate({ _actionHandlers: () => undefined });
+    const { api } = fakeDiscovery([messageTable, dispatcher]);
+
+    expect(findDispatcher(api)).toBe(dispatcher);
+  });
+
+  it("skips a message table that answers with a function for every key", () => {
+    const messageTable = candidate({
+      _actionHandlers: () => undefined,
+      _subscriptions: () => undefined,
+      _interceptors: () => undefined,
+    });
+    const { api } = fakeDiscovery([messageTable]);
+
+    expect(findDispatcher(api)).toBeUndefined();
+  });
+
+  it("reports nothing when no module holds up at all", () => {
+    const { api } = fakeDiscovery([]);
+
+    expect(findDispatcher(api)).toBeUndefined();
+  });
+});
+
+describe("flux without a dispatcher", () => {
+  it("keeps stores working and names the gap from the members that need one", () => {
+    const { api, stores } = fakeDiscovery();
+    const channelStore = { getName: () => "ChannelStore" };
+    stores.set("ChannelStore", channelStore);
+
+    const surface = createFluxSurface(api, undefined);
+
+    // The lookup half does not need a dispatcher at all.
+    expect(surface.stores["ChannelStore"]).toBe(channelStore);
+    // The half that does says so, instead of handing plugin code undefined.
+    expect(() => surface.dispatcher).toThrow(/no Discord FluxDispatcher/);
+    expect(() => surface.intercept(() => undefined)).toThrow(/no Discord FluxDispatcher/);
   });
 });
 
@@ -188,5 +252,63 @@ describe("flux.awaitStore", () => {
     store._isInitialized = true;
     await pending;
     expect(resolved).toBe(true);
+  });
+});
+
+describe("installInterceptor", () => {
+  const handler: Interceptor = () => false;
+
+  function dispatcherWith(fields: Partial<Dispatcher>): Dispatcher {
+    return {
+      dispatch: () => Promise.resolve(),
+      subscribe: () => undefined,
+      unsubscribe: () => undefined,
+      ...fields,
+    };
+  }
+
+  it("uses the dispatcher's array when there is one, as upstream does", () => {
+    const dispatcher = dispatcherWith({ _interceptors: [] });
+
+    expect(installInterceptor(dispatcher, handler)).toEqual({ ok: true, via: "array" });
+    expect(dispatcher._interceptors).toEqual([handler]);
+  });
+
+  it("creates the list when the field is absent, mirroring upstream's ??=", () => {
+    const dispatcher = dispatcherWith({});
+
+    expect(installInterceptor(dispatcher, handler)).toEqual({ ok: true, via: "array" });
+    expect(dispatcher._interceptors).toEqual([handler]);
+  });
+
+  it("falls back to Discord's own installer when the field is not an array", () => {
+    const added: Interceptor[] = [];
+    const dispatcher = dispatcherWith({
+      _interceptors: new Set<Interceptor>(),
+      addInterceptor: (interceptor) => {
+        added.push(interceptor);
+      },
+    });
+
+    expect(installInterceptor(dispatcher, handler)).toEqual({ ok: true, via: "addInterceptor" });
+    expect(added).toEqual([handler]);
+  });
+
+  it("refuses, naming the shape it found, when neither path exists", () => {
+    const dispatcher = dispatcherWith({ _interceptors: "a string" });
+    const outcome = installInterceptor(dispatcher, handler);
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toContain("holds string");
+  });
+
+  it("keeps the rest of the surface usable and throws by name from intercept", () => {
+    const { api } = fakeDiscovery();
+    const surface = createFluxSurface(api, dispatcherWith({ _interceptors: "a string" }));
+
+    // The API build survives — this is what cost every plugin its verdict
+    // when the field was read unconditionally.
+    expect(surface.dispatcher).toBeDefined();
+    expect(() => surface.intercept(() => undefined)).toThrow(/no dispatcher interceptor/);
   });
 });

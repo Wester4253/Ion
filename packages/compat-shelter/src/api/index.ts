@@ -80,7 +80,16 @@ export interface ShelterApiDeps {
 async function buildApi(deps: ShelterApiDeps): Promise<ShelterApiSurface> {
   await deps.discovery.onceReady;
 
-  const flux = createFluxSurface(deps.discovery, findDispatcher(deps.discovery));
+  // A build that hides its dispatcher must not take `stores` — and with it
+  // every plugin — down with it: the members that need it report it by name.
+  const dispatcher = findDispatcher(deps.discovery);
+  if (dispatcher === undefined) {
+    shelterLog(
+      "flux could not resolve Discord's FluxDispatcher; .dispatcher and .intercept will report it, .stores still works",
+      "warn",
+    );
+  }
+  const flux = createFluxSurface(deps.discovery, dispatcher);
   const http = createHttpSurface(deps.discovery);
   const settings = createSettingsSurface((message: string) => {
     shelterLog(message, "warn");
