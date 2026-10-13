@@ -5,9 +5,14 @@ import { applyCspGrants, parsePolicy, patchPolicy } from "./csp";
 const DISCORD_POLICY =
   "default-src 'self'; connect-src https://discord.com https://status.discord.com; img-src 'self' blob: https://cdn.discordapp.com; upgrade-insecure-requests";
 
+/** Grants in table order: `*.vencord.dev`, then the two GitHub hosts, then userpfp's. */
+const CONNECT_GRANTS = "*.vencord.dev raw.githubusercontent.com userpfp.github.io";
+const IMG_GRANTS = "*.vencord.dev raw.githubusercontent.com";
+
 /** The exact rewrite of DISCORD_POLICY: grants appended, order and separators preserved. */
 const EXPECTED_PATCHED_POLICY =
-  "default-src 'self'; connect-src https://discord.com https://status.discord.com *.vencord.dev; img-src 'self' blob: https://cdn.discordapp.com *.vencord.dev; upgrade-insecure-requests";
+  `default-src 'self'; connect-src https://discord.com https://status.discord.com ${CONNECT_GRANTS}; ` +
+  `img-src 'self' blob: https://cdn.discordapp.com ${IMG_GRANTS}; upgrade-insecure-requests`;
 
 describe("parsePolicy", () => {
   test("splits directives from sources", () => {
@@ -26,12 +31,16 @@ describe("parsePolicy", () => {
 });
 
 describe("patchPolicy", () => {
-  test("appends the vencord.dev grants to connect-src and img-src", () => {
-    const patched = patchPolicy(DISCORD_POLICY);
-    expect(patched).toContain(
-      "connect-src https://discord.com https://status.discord.com *.vencord.dev",
+  test("appends every grant to connect-src, in table order", () => {
+    expect(patchPolicy(DISCORD_POLICY)).toContain(
+      `connect-src https://discord.com https://status.discord.com ${CONNECT_GRANTS}`,
     );
-    expect(patched).toContain("img-src 'self' blob: https://cdn.discordapp.com *.vencord.dev");
+  });
+
+  test("appends img grants only to img-src, leaving userpfp's host off it", () => {
+    expect(patchPolicy(DISCORD_POLICY)).toContain(
+      `img-src 'self' blob: https://cdn.discordapp.com ${IMG_GRANTS}`,
+    );
   });
 
   test("leaves unrelated directives untouched", () => {
@@ -45,8 +54,16 @@ describe("patchPolicy", () => {
 
   test("creates a missing directive seeded from default-src", () => {
     const patched = patchPolicy("default-src 'self'");
-    expect(patched).toContain("connect-src 'self' *.vencord.dev");
-    expect(patched).toContain("img-src 'self' *.vencord.dev");
+    expect(patched).toContain(`connect-src 'self' ${CONNECT_GRANTS}`);
+    expect(patched).toContain(`img-src 'self' ${IMG_GRANTS}`);
+  });
+
+  test("grants userpfp's host connect only, never img", () => {
+    // The manifest is JSON, not an image: widening img-src would let the page
+    // load active content from a host nothing here serves.
+    const directives = parsePolicy(patchPolicy(DISCORD_POLICY));
+    expect(directives.get("img-src")).not.toContain("userpfp.github.io");
+    expect(directives.get("connect-src")).toContain("userpfp.github.io");
   });
 });
 

@@ -55,6 +55,31 @@ variables only) showing injection time, shell version, bridge state, and live
 webpack-discovery status. It is a diagnostic: the product UI lives in
 `packages/ui`.
 
+### Content-Security-Policy grants
+
+Discord serves an enforced `content-security-policy` on its documents, and its
+`connect-src` allowlist does not include the hosts that modded clients call.
+The shell extends it from the main process — the same approach upstream
+Vencord and Vesktop take (`src/main/csp`) — in
+`shell-desktop/src/main/csp.ts`: `registerCspHandler` rewrites the enforced
+header on main-frame responses, drops the report-only one (it would report the
+violations patched plugins cause on purpose), and appends a strict allowlist.
+Every grant names its consumer, so the whole set of external hosts Ion lets
+Discord's document reach is reviewable in one table.
+
+| Grant                       | Directives               | Consumer                                                       |
+| --------------------------- | ------------------------ | -------------------------------------------------------------- |
+| `*.vencord.dev`             | `connect-src`, `img-src` | BadgeAPI's badges and their images (upstream grants the same). |
+| `raw.githubusercontent.com` | `connect-src`, `img-src` | tarp's theme list and userpfp's avatar files.                  |
+| `userpfp.github.io`         | `connect-src`            | userpfp's manifest (`source/data.json`); it serves no images.  |
+
+The last two are **a deliberate deviation from stock Discord**, which blocks
+both hosts: a plugin that fetches its data from GitHub would otherwise fail
+with a bare `Failed to fetch` that says nothing about why. Page-side plugins
+cannot add grants themselves — the compat facades report CSP override
+requests as handled by Ion — so anything missing from the table fails
+visibly and is added here with its consumer named.
+
 ## Settings store and plugin host
 
 `packages/core/src/settings.ts` persists everything to one JSON document

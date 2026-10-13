@@ -1,14 +1,16 @@
 /**
  * Content-Security-Policy extension for Discord documents.
  *
- * Discord's own CSP blocks the vencord.dev hosts that the bundled Vencord
- * plugins call — BadgeAPI fetches badges.vencord.dev at startup and would
- * otherwise fail every load. Upstream Vencord and Vesktop extend the CSP
- * from their main process the same way (Vendicated/Vencord, src/main/csp);
- * this is Ion's deliberately minimal equivalent: only the grants the
- * bundled plugin set needs, each listed with its consumer. Page-side
- * plugins cannot add grants themselves — the compat facade reports CSP
- * override requests as handled by Ion.
+ * Discord's own CSP blocks the hosts that modded clients and their plugins
+ * call — vencord.dev for the bundled Vencord set (BadgeAPI fetches
+ * badges.vencord.dev at startup and would otherwise fail every load), and
+ * GitHub's raw file host for catalog plugins that fetch their data there.
+ * Upstream Vencord and Vesktop extend the CSP from their main process the
+ * same way (Vendicated/Vencord, src/main/csp); this is Ion's deliberately
+ * minimal equivalent: only the grants a measured failure needed, each listed
+ * with its consumer, and the whole table recorded in docs/architecture.md.
+ * Page-side plugins cannot add grants themselves — the compat facade reports
+ * CSP override requests as handled by Ion.
  *
  * Report-only headers are dropped, matching upstream: they would report
  * CSP violations (which patched plugins intentionally cause) to Discord.
@@ -33,6 +35,16 @@ const CSP_GRANTS: readonly (readonly [source: string, directives: readonly strin
   // BadgeAPI (badges.vencord.dev) and its badge images; upstream grants
   // *.vencord.dev connect+img as well (CspPolicies in Vendicated/Vencord).
   ["*.vencord.dev", ["connect-src", "img-src"]],
+  // Shelter plugins that fetch their data from GitHub's raw file host:
+  // tarp reads `themes.json` and userpfp's database is a github.io manifest
+  // whose entries point back at raw.githubusercontent.com. connect for the
+  // manifest, img for the avatars it lists. Stock Discord's policy has
+  // neither, so this is a deliberate deviation — recorded, with the rest of
+  // the table, in docs/architecture.md ("Content-Security-Policy grants").
+  // Note tarp's per-theme CSS links are arbitrary hosts and stay blocked.
+  ["raw.githubusercontent.com", ["connect-src", "img-src"]],
+  // userpfp's own manifest host (source/data.json); it serves no images.
+  ["userpfp.github.io", ["connect-src"]],
 ];
 
 const REPORT_ONLY_HEADER = "content-security-policy-report-only";
