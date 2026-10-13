@@ -110,9 +110,13 @@ on everything unblocked; only truly blocking items stop the run.
   2. (b) Trim to a smaller core for a faster first loop.
   3. (c) A different list — tell me the names.
 - **Recommended default**: (a).
-- **Status**: proceeding with (a) to keep the measurement unblocked; the
-  scoreboard records exactly how each of the ten fared, and your edit later just
-  changes the acceptance file and reruns the harness.
+- **Status**: measured with (a) — **10/10 load and survive the 180s soak: 9
+  clean, 1 with a recorded warning, 0 failures** (`docs/compat-shelter.md`).
+  The warning is Antitrack, and it is not a defect: its file evaluates to
+  nothing because it does all of its work while being evaluated, which
+  upstream also tolerates — the adapter reports it rather than passing it
+  silently. Still your call: edit the set and the harness reruns against the
+  new list.
 
 ## Q6: Where Shelter's plugin list comes from
 
@@ -129,3 +133,28 @@ on everything unblocked; only truly blocking items stop the run.
 - **Recommended default**: (a), since AGENTS.md already forbids telemetry and
   lists catalog fetches as one of Ion's only own network calls.
 - **Status**: proceeding with (a).
+
+## Q7: Packaging identity (icon, app id, update endpoint)
+
+- **Question**: Packaging (AppImage, .deb, PKGBUILD, Windows installer) is the
+  last unstarted piece of V1, and three choices are yours rather than mine: the
+  Ion icon files (a PNG set on Linux, an `.ico` on Windows), the app id and
+  product name that installers and the tray will use, and the URL the update
+  check is allowed to ping. AGENTS.md permits exactly two own network calls —
+  update check and catalog fetch — so the third one has to be real before it
+  ships.
+- **Why it matters**: an icon I invent is not branding you chose, and an update
+  URL that does not exist yet ships as a broken check against a host that never
+  answered. Both are visible in every install, so neither should be guessed
+  past a clearly-marked first draft.
+- **Options**:
+  1. (a) Ship packaging now with a placeholder icon labelled as such, app id
+     `network.ion.client`, and the update check left _present but unwired_
+     until you name an endpoint — the app never pings a URL nobody agreed to.
+  2. (b) Hold packaging entirely until you supply the icon set and endpoint.
+  3. (c) Placeholder icon, but wire the update check to this repository's
+     GitHub Releases feed.
+- **Recommended default**: (a) — packaging becomes testable and installable
+  now, and nothing phones home that you did not name.
+- **Status**: proceeding with (a) to keep packaging unblocked; the placeholder
+  icon is labelled in the build and in `docs/linux.md`.
