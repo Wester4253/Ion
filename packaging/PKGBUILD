@@ -9,15 +9,22 @@
 # and the launcher all belong to the package.
 #
 # CachyOS note: Arch's x86_64 packages run everywhere. CachyOS also publishes
-# x86_64_v3 (AVX2) builds; set ION_TARGET_ARCH below to x86_64_v3 to make pacman
-# refuse to install on hardware without AVX2, and everything else stays the same.
+# x86_64_v3 (AVX2) and x86_64_v4 builds, so pacman there can refuse to install a
+# package that does not declare the level it was built for. Ion builds no native
+# code — the only compiled parts are Electron's own, shipped as x86_64 — so the
+# honest declaration is x86_64. Set ION_TARGET_ARCH=x86_64_v3 to narrow it on
+# purpose: every prebuilt object stays x86_64, and pacman starts requiring AVX2
+# for the whole package, which no part of it needs.
 
 pkgbase=ion
+# Overridable from the environment so a CachyOS build can narrow the target
+# without editing this file (see the note above).
+_arch="${ION_TARGET_ARCH:-x86_64}"
+arch=("$_arch")
 pkgname=ion
 pkgver=0.0.0
 pkgrel=1
 pkgdesc='A lightweight Discord client mod that loads Vencord, Equicord, BetterDiscord and Shelter plugins'
-arch=(x86_64)
 url='https://github.com/fry-schnetzer/ion'
 license=(GPL-3.0-only)
 depends=(
@@ -130,6 +137,9 @@ package() {
 
   # The launcher is an absolute symlink, so it keeps working however the tree
   # is moved or bind-mounted, and it is what the desktop entry and the shell use.
+  # The launcher is an absolute symlink, which is what the desktop entry and
+  # the shell itself use; `-r` would write a relative path that breaks the
+  # moment either side is bind-mounted.
   install -dm755 "$pkgdir/usr/bin"
   ln -sf '/usr/lib/ion/ion' "$pkgdir/usr/bin/ion"
 

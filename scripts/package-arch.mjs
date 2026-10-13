@@ -10,11 +10,15 @@
  * The result can be installed with `pacman -U` and inspected with
  * `pacman -Qip/-Qlp`; `--install` does the install itself (needs sudo).
  *
+ * AUR submission is packaging/{PKGBUILD,ion.install,ion.desktop,ion.appdata.xml}
+ * plus the .SRCINFO this writes with makepkg's own `--printsrcinfo` — not a
+ * hand-rolled parser, which cannot tell a dependency from a description.
+ *
  * Usage: node scripts/package-arch.mjs [--install]
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -99,9 +103,26 @@ async function main() {
     process.stdout.write(`[ion] ${name} → packaging/${name}\n`);
   }
 
+  await writeSrcinfo();
+
   if (process.argv.includes("--install")) {
     sh("pacman", ["-U", "--noconfirm", ...built.map((name) => join(packaging, name))]);
   }
+}
+
+/** Writes packaging/.SRCINFO from the PKGBUILD, the way AUR expects it. */
+async function writeSrcinfo() {
+  const result = spawnSync("makepkg", ["--printsrcinfo"], { cwd: buildDir, encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`could not read the package metadata: ${result.stderr}`);
+  }
+  // makepkg prints tab-indented lines; .SRCINFO is the same text without them.
+  const sourceinfo = result.stdout.replace(/^\t/gm, "");
+  if (!sourceinfo.includes("pkgbase = ion")) {
+    throw new Error(".SRCINFO came back without the package identity");
+  }
+  await writeFile(join(packaging, ".SRCINFO"), sourceinfo);
+  process.stdout.write("[ion] wrote packaging/.SRCINFO\n");
 }
 
 main().catch((error) => {
