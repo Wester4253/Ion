@@ -157,6 +157,44 @@ describe("registration", () => {
     await manager.initialize();
     expect(host.registered.size).toBe(0);
   });
+
+  it("registers both when two staged plugins publish under one name", async () => {
+    const shared = JSON.stringify({ name: "Shared", version: "1.0.0" });
+    const { manager, host } = managerFor(
+      {
+        [`${SHELTER_PLUGIN_ROOT}/first/plugin.json`]: shared,
+        [`${SHELTER_PLUGIN_ROOT}/first/plugin.js`]: "({})",
+        [`${SHELTER_PLUGIN_ROOT}/second/plugin.json`]: shared,
+        [`${SHELTER_PLUGIN_ROOT}/second/plugin.js`]: "({})",
+      },
+      { [SHELTER_PLUGIN_ROOT]: ["second", "first"] },
+    );
+
+    await manager.initialize();
+
+    // A duplicate name used to throw inside `register`, reject the whole of
+    // `initialize`, and leave every plugin staged behind the collision
+    // unregistered — measured once, in a sweep of 131, as one collision
+    // costing forty plugins their verdict. Both are registered now, each
+    // under a name no other plugin holds.
+    expect(host.registered.size).toBe(2);
+    expect(host.registered.get("shelter.first")?.name).toBe("Shared (first)");
+    expect(host.registered.get("shelter.second")?.name).toBe("Shared (second)");
+  });
+
+  it("leaves an uncontested name exactly as the manifest publishes it", async () => {
+    const { manager, host } = managerFor(
+      {
+        [`${SHELTER_PLUGIN_ROOT}/antitrack/plugin.json`]: MANIFEST,
+        [`${SHELTER_PLUGIN_ROOT}/antitrack/plugin.js`]: "({})",
+      },
+      { [SHELTER_PLUGIN_ROOT]: ["antitrack"] },
+    );
+
+    await manager.initialize();
+
+    expect(host.registered.get("shelter.antitrack")?.name).toBe("Antitrack");
+  });
 });
 
 describe("start and snapshot", () => {
