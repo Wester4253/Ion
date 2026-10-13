@@ -1,12 +1,20 @@
 /**
- * Renders the generated compatibility scoreboard (docs/compat.md).
+ * Renders the generated compatibility scoreboard (docs/compat.md,
+ * docs/compat-bd.md, or docs/compat-shelter.md).
  *
  * Pure string building — the CLI writes the result. The document carries the
  * full evidence chain: how the run was performed, every failure with its
  * one-line reason, the by-design errors, and the owner's Tier 3 checklist.
  */
 
-import type { CompatPluginReport, CompatReport } from "./report";
+import type { CompatPluginReport, CompatReport, Ecosystem } from "./report";
+
+/** Display name for each ecosystem, so a shelter run never reads as Vencord. */
+const ECOSYSTEM_LABELS: Readonly<Record<Ecosystem, string>> = {
+  vencord: "Vencord",
+  bd: "BetterDiscord",
+  shelter: "Shelter",
+};
 
 function escapeCell(value: string): string {
   return value.replace(/\|/g, "\\|");
@@ -39,7 +47,7 @@ function statusCell(status: CompatReport["plugins"][number]["status"]): string {
 export function renderCompatMarkdown(report: CompatReport): string {
   const lines: string[] = [];
   const { meta, summary, run } = report;
-  const label = meta.ecosystem === "bd" ? "BetterDiscord" : "Vencord";
+  const label = ECOSYSTEM_LABELS[meta.ecosystem];
 
   lines.push("# Compatibility scoreboard");
   lines.push("");

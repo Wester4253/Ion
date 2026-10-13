@@ -29,7 +29,8 @@ export interface AcceptanceEntry {
   readonly name: string;
   /**
    * Host id when it differs from the plugin name. BetterDiscord plugins
-   * register as `bd.<name>`, so their host state carries that id.
+   * register as `bd.<name>` and Shelter plugins as `shelter.<folder>`, so
+   * their host state carries that id.
    */
   readonly id?: string;
   readonly note?: string;
@@ -41,13 +42,19 @@ export interface AcceptanceEntry {
    */
   readonly diagnosis?: string;
   readonly tier3?: string;
-  /** BetterDiscord: raw URL the harness downloads and stages (sha256-pinned). */
+  /**
+   * URL the harness downloads and stages (BetterDiscord: the raw plugin
+   * file; Shelter: the directory holding `plugin.js` and `plugin.json`).
+   */
   readonly url?: string;
+  /** sha256 of what gets staged — for Shelter, `plugin.js`. */
   readonly sha256?: string;
+  /** Shelter only: sha256 of `plugin.json`, pinned beside the executable. */
+  readonly manifestSha256?: string;
 }
 
 /** Which compatibility surface a report covers. */
-export type Ecosystem = "vencord" | "bd";
+export type Ecosystem = "vencord" | "bd" | "shelter";
 
 export interface PatchNotice {
   readonly level: "warn" | "error";
