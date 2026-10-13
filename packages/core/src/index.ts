@@ -17,7 +17,8 @@ import { createPluginHost } from "./plugins";
 import type { IonDiscoveryApi, IonGlobal, IonWebpackStatus, ShellFileApi } from "./platform/shell";
 import { createSettingsStore } from "./settings";
 import { domStorage } from "./storage";
-import { createThemeStore } from "./themes";
+import { createThemeStore, syncThemeDirectory, watchThemesDir } from "./themes";
+import { parseThemeHeader } from "./themeHeaders";
 import {
   find,
   findAll,
@@ -51,6 +52,7 @@ export type {
   IonPluginStatus,
   IonPluginsApi,
   IonTheme,
+  IonThemeHostApi,
   IonThemeInfo,
   IonThemesApi,
   IonUiApi,
@@ -67,7 +69,26 @@ export { createPluginHost, type PluginHost } from "./plugins";
 export type { Patch, PatchNotice, PatchStatsApi, PluginPatchStats } from "./patches";
 export { createSettingsStore, type PluginSettings, type SettingsStore } from "./settings";
 export { domStorage, type DomStorage, type DomStorageBackend } from "./storage";
-export { createThemeStore, type ThemeStore, type ThemeStoreOptions } from "./themes";
+export {
+  createThemeStore,
+  syncThemeDirectory,
+  THEME_BASE_CSS,
+  watchThemesDir,
+  type ThemeDirectoryOptions,
+  type ThemeRead,
+  type ThemeSkip,
+  type ThemeStore,
+  type ThemeStoreOptions,
+  type ThemeSyncResult,
+  type ThemeWatchOptions,
+} from "./themes";
+export {
+  parseThemeHeader,
+  THEME_HEADER_FALLBACKS,
+  themeNameFromFilename,
+  type ParseThemeHeaderOptions,
+  type ThemeHeader,
+} from "./themeHeaders";
 
 export {
   find,
@@ -112,6 +133,11 @@ const UNAVAILABLE_FILES: ShellFileApi = {
   },
   exists() {
     return Promise.resolve(false);
+  },
+  watch() {
+    // No bridge means no inotify either; hot reload degrades to a load at
+    // boot, which the callers already handle.
+    throw new Error("shell bridge unavailable");
   },
 };
 
@@ -180,6 +206,14 @@ state.patches = { stats: () => getPatchRegistry().stats() };
 
 const themes = createThemeStore({ settings });
 state.themes = themes;
+// Adapters cannot import core (a second copy would duplicate the host), so
+// the shared half of the theme engine — header parsing, directory sync, hot
+// reload — is published next to the store instead.
+state.themeHost = {
+  parseHeader: parseThemeHeader,
+  syncDirectory: syncThemeDirectory,
+  watchDirectory: watchThemesDir,
+};
 
 initWebpack();
 mountDebugPanel();

@@ -31,6 +31,11 @@ function fakeFiles(initial: Record<string, string> = {}): FakeFiles {
     exists(path) {
       return Promise.resolve(files.has(path));
     },
+    watch() {
+      // The settings store never hot-reloads; adapters need this method to
+      // exist because the bridge declares it.
+      return () => undefined;
+    },
   };
   return { api, files };
 }

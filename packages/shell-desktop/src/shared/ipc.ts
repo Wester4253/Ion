@@ -29,6 +29,12 @@ export const IPC = {
   fsMkdir: "ion:fs:mkdir",
   /** sendSync: scoped existence check. */
   fsExists: "ion:fs:exists",
+  /** sendSync: subscribe to changes under a scoped path. */
+  fsWatch: "ion:fs:watch",
+  /** sendSync: drop a subscription by its token. */
+  fsUnwatch: "ion:fs:unwatch",
+  /** main → renderer: the files that changed under a subscribed path. */
+  fsChanged: "ion:fs:changed",
 } as const;
 
 export type IonChannel = (typeof IPC)[keyof typeof IPC];
@@ -52,6 +58,23 @@ export interface FsWriteRequest {
   readonly path: string;
   readonly data: string;
   readonly encoding: FileEncoding;
+}
+
+export interface FsWatchRequest {
+  readonly path: string;
+}
+
+export interface FsUnwatchRequest {
+  readonly token: number;
+}
+
+/**
+ * One filesystem change, reported for a subscription. Paths are relative to
+ * the Ion data directory, exactly like every other bridge call.
+ */
+export interface FsChange {
+  readonly token: number;
+  readonly changed: readonly string[];
 }
 
 /** Envelope for synchronous filesystem calls; errors never cross as throws. */

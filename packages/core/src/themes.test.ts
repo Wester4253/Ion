@@ -13,7 +13,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { IonTheme, ShellFileApi } from "./platform/shell";
 import { createSettingsStore, type SettingsStore } from "./settings";
-import { createThemeStore, type ThemeStore } from "./themes";
+import {
+  createThemeStore,
+  syncThemeDirectory,
+  watchThemesDir,
+  type ThemeRead,
+  type ThemeStore,
+} from "./themes";
 
 const SETTINGS_PATH = "settings/core.json";
 
@@ -41,6 +47,10 @@ function fakeFiles(initial: Record<string, unknown> | undefined): ShellFileApi {
     },
     exists(path) {
       return Promise.resolve(content !== undefined && path === SETTINGS_PATH);
+    },
+    watch() {
+      // Theme tests that exercise hot reload install their own fake below.
+      return () => undefined;
     },
   };
 }
@@ -255,5 +265,296 @@ describe("createThemeStore", () => {
 
     expect(store.setEnabled("same", true)).toBe(true);
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+// -- Directory ingestion and hot reload ------------------------------------
+
+const DIR = "tests/themes";
+
+/** A stand-in adapter reader: a file without the marker is unusable. */
+async function readTheme(files: ShellFileApi, filename: string): Promise<ThemeRead> {
+  const source = await files.readFile(`${DIR}/${filename}`, "utf8");
+  if (!source.startsWith("/*")) return { ok: false, reason: "not a theme" };
+  return {
+    ok: true,
+    theme: {
+      id: `test.${filename.replace(/\W+/g, "_")}`,
+      name: filename.replace(/\.css$/, ""),
+      description: "directory theme",
+      authors: [filename],
+      filename,
+      css: source,
+    },
+  };
+}
+
+interface DirectoryFixture {
+  readonly store: ThemeStore;
+  readonly settings: SettingsStore;
+  readonly files: ShellFileApi;
+  /** The files on disk, so a test can edit or remove one. */
+  readonly onDisk: Map<string, string>;
+  /** Reports a change to every live subscription. */
+  notify(): void;
+  /** Whether the last subscription was released. */
+  unsubscribed(): boolean;
+}
+
+async function directoryFixture(entries: Record<string, string> = {}): Promise<DirectoryFixture> {
+  const { store, settings } = await fixture();
+  const onDisk = new Map(Object.entries(entries).map(([n, c]) => [`${DIR}/${n}`, c]));
+  const listeners = new Set<(changed: readonly string[]) => void>();
+  let unsubscribed = false;
+
+  const files: ShellFileApi = {
+    readFile(path) {
+      const content = onDisk.get(path);
+      return content === undefined
+        ? Promise.reject(new Error(`missing ${path}`))
+        : Promise.resolve(content);
+    },
+    writeFile(path, data) {
+      onDisk.set(path, data);
+      return Promise.resolve();
+    },
+    readdir(path) {
+      if (path !== DIR) return Promise.reject(new Error(`missing ${path}`));
+      const prefix = `${DIR}/`;
+      return Promise.resolve([...onDisk.keys()].map((key) => key.slice(prefix.length)).sort());
+    },
+    mkdir() {
+      return Promise.resolve();
+    },
+    exists(path) {
+      return Promise.resolve(onDisk.has(path));
+    },
+    watch(_path, onChanged) {
+      listeners.add(onChanged);
+      return () => {
+        unsubscribed = true;
+        listeners.clear();
+      };
+    },
+  };
+
+  return {
+    store,
+    settings,
+    files,
+    onDisk,
+    notify() {
+      for (const listener of listeners) listener([]);
+    },
+    unsubscribed: () => unsubscribed,
+  };
+}
+
+describe("syncThemeDirectory", () => {
+  it("loads the directory in order and reports what it skipped", async () => {
+    const { store, files } = await directoryFixture({
+      "B.theme.css": "/* theme b */",
+      "A.theme.css": "/* theme a */",
+      "notes.txt": "not a theme",
+    });
+
+    const result = await syncThemeDirectory({
+      store,
+      files,
+      dir: DIR,
+      readTheme,
+      registered: new Map(),
+    });
+
+    if (!result.ok) throw new Error("expected a successful sync");
+    expect(result.loaded).toEqual(["test.A_theme_css", "test.B_theme_css"]);
+    expect(result.skipped).toEqual([{ filename: "notes.txt", reason: "not a theme" }]);
+    expect(store.list().map((info) => info.id)).toEqual(result.loaded);
+  });
+
+  it("reports a directory it cannot list", async () => {
+    const { store } = await fixture();
+
+    const result = await syncThemeDirectory({
+      store,
+      files: fakeFiles(undefined),
+      dir: DIR,
+      readTheme,
+      registered: new Map(),
+    });
+
+    if (result.ok) throw new Error("expected a failed sync");
+    expect(result.reason).toBe("not exercised");
+  });
+
+  it("unregisters a file that is gone", async () => {
+    const registered = new Map<string, string>();
+    const { store, files, onDisk } = await directoryFixture({ "A.theme.css": "/* theme a */" });
+    await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+
+    onDisk.delete(`${DIR}/A.theme.css`);
+    const result = await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+
+    expect(result).toEqual({ ok: true, loaded: [], skipped: [], removed: ["test.A_theme_css"] });
+    expect(store.list()).toEqual([]);
+  });
+
+  it("re-reads a changed file and keeps its persisted enablement", async () => {
+    const registered = new Map<string, string>();
+    const { store, settings, files } = await directoryFixture({ "A.theme.css": "/* theme a */" });
+    await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+    store.boot();
+    store.setEnabled("test.A_theme_css", false);
+
+    await files.writeFile(`${DIR}/A.theme.css`, "/* theme a, edited */");
+    const result = await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+
+    // A re-read swaps records; the enablement key lives outside the record.
+    if (!result.ok) throw new Error("expected a successful sync");
+    expect(result.loaded).toEqual(["test.A_theme_css"]);
+    expect(store.get("A.theme.css")?.css).toBe("/* theme a, edited */");
+    expect(store.isEnabled("A.theme.css")).toBe(false);
+    expect(settings.get("themes.enabled.test.A_theme_css", true)).toBe(false);
+  });
+
+  it("leaves a theme alone when nothing about it changed", async () => {
+    const registered = new Map<string, string>();
+    const { store, files } = await directoryFixture({ "A.theme.css": "/* theme a */" });
+    await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    const result = await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+
+    // An unrelated save in the same directory fires the watcher too; nothing
+    // moved, so the store is not touched.
+    if (!result.ok) throw new Error("expected a successful sync");
+    expect(result.loaded).toEqual([]);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("keeps a running theme when its file stops parsing", async () => {
+    const registered = new Map<string, string>();
+    const { store, files } = await directoryFixture({ "A.theme.css": "/* theme a */" });
+    await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+
+    await files.writeFile(`${DIR}/A.theme.css`, "half-written");
+    const result = await syncThemeDirectory({ store, files, dir: DIR, readTheme, registered });
+
+    if (!result.ok) throw new Error("expected a successful sync");
+    expect(result.skipped).toEqual([{ filename: "A.theme.css", reason: "not a theme" }]);
+    expect(store.get("A.theme.css")?.css).toBe("/* theme a */");
+  });
+
+  it("ignores entries the directory does not accept", async () => {
+    const { store, files } = await directoryFixture({ "A.theme.css": "/* theme a */" });
+
+    const result = await syncThemeDirectory({
+      store,
+      files,
+      dir: DIR,
+      readTheme,
+      accepts: (filename) => filename.startsWith("A."),
+      registered: new Map(),
+    });
+
+    expect(result).toEqual({ ok: true, loaded: ["test.A_theme_css"], skipped: [], removed: [] });
+  });
+
+  it("isolates a reader that throws", async () => {
+    const { store, files } = await directoryFixture({ "A.theme.css": "/* theme a */" });
+
+    const result = await syncThemeDirectory({
+      store,
+      files,
+      dir: DIR,
+      readTheme: () => Promise.reject(new Error("reader exploded")),
+      registered: new Map(),
+    });
+
+    if (!result.ok) throw new Error("expected a successful sync");
+    expect(result.skipped).toEqual([{ filename: "A.theme.css", reason: "reader exploded" }]);
+    expect(store.list()).toEqual([]);
+  });
+});
+
+describe("watchThemesDir", () => {
+  it("coalesces a burst of notifications into one reconcile", async () => {
+    vi.useFakeTimers();
+    const watchers = await directoryFixture({ "A.theme.css": "/* theme a */" });
+    const reconcile = vi.fn(() => Promise.resolve());
+    const unwatch = watchThemesDir({ files: watchers.files, dir: DIR, reconcile });
+
+    watchers.notify();
+    watchers.notify();
+    watchers.notify();
+    expect(reconcile).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    unwatch();
+    expect(watchers.unsubscribed()).toBe(true);
+  });
+
+  it("reports a reconcile that fails without stopping the watcher", async () => {
+    vi.useFakeTimers();
+    const watchers = await directoryFixture();
+    const unwatch = watchThemesDir({
+      files: watchers.files,
+      dir: DIR,
+      reconcile: () => Promise.reject(new Error("disk gone")),
+    });
+
+    watchers.notify();
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(console.warn).toHaveBeenCalledWith(
+      "[ion] [themes]",
+      expect.stringContaining("reload after a file change failed"),
+    );
+    unwatch();
+  });
+
+  it("degrades to a no-op when the shell cannot watch", async () => {
+    const { store } = await fixture();
+    const files: ShellFileApi = {
+      ...fakeFiles(undefined),
+      watch() {
+        throw new Error("ENOSPC: inotify watch limit reached");
+      },
+    };
+
+    const unwatch = watchThemesDir({
+      files,
+      dir: DIR,
+      reconcile: () => {
+        // Nothing to reconcile: the point is that a shell which cannot watch
+        // still hands back a callable unsubscribe.
+      },
+    });
+
+    // Nothing was ever subscribed, so releasing is a no-op rather than a
+    // throw — the adapter keeps the load it already has.
+    unwatch();
+    expect(console.warn).toHaveBeenCalledWith(
+      "[ion] [themes]",
+      expect.stringContaining("hot reload is off"),
+    );
+    expect(store.list()).toEqual([]);
+  });
+});
+
+describe("the documented theme variables", () => {
+  it("installs the base style exactly once per store", async () => {
+    await fixture();
+
+    const styles = document.head.querySelectorAll("style[data-ion-theme-base]");
+    expect(styles).toHaveLength(1);
+    expect(styles[0]?.textContent).toContain("--ion-theme-background");
+
+    // A second store replaces the element rather than stacking another.
+    await fixture();
+    expect(document.head.querySelectorAll("style[data-ion-theme-base]")).toHaveLength(1);
   });
 });

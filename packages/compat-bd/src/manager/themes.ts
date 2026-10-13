@@ -2,18 +2,22 @@
  * BetterDiscord's theme directory, loaded into Ion's theme store.
  *
  * Upstream's ThemeManager reads `themes/*.theme.css` files with the same
- * JSDoc meta header plugins use; here `window.__ION__.themes` owns
- * injection, persistence, and enablement, so this file only reads,
- * registers, and re-reads — isolated per file like the plugin loader: one
- * broken theme never blocks another. Enablement defaults to on (recorded
- * as a deviation in THIRD_PARTY.md; BetterDiscord itself defaults new
- * addons to off).
+ * JSDoc meta header plugins use, and refuses a file without one. Ion keeps
+ * the header — parsed by core's shared theme-header parser, which is where
+ * BetterDiscord's fallbacks live — and goes further: a `.theme.css` with no
+ * header at all is plain CSS, named after its file, and still loads.
+ *
+ * Everything past "read this one file" is core's `syncThemeDirectory`, so
+ * the first load, a targeted reload, and the re-read a file-change
+ * notification triggers all behave the same way; `registered` below is the
+ * bookkeeping it needs. Per-file isolation is unchanged: one broken theme
+ * never blocks another. Enablement defaults to on (recorded as a deviation
+ * in THIRD_PARTY.md; BetterDiscord itself defaults new addons to off).
  */
 
-import type { IonTheme, ShellFileApi } from "@ion/core";
+import type { IonTheme, IonThemesApi, ShellFileApi, ThemeRead, ThemeSkip } from "@ion/core";
 
-import { themesStore } from "../host";
-import { readAddonMeta } from "./meta";
+import { themeHost, themesStore } from "../host";
 import { adapterLogger, bdAddonIdFor, errorMessage } from "./pluginmanager";
 
 const THEME_DIR = "bd/themes";
@@ -22,8 +26,41 @@ const THEME_EXTENSION = ".theme.css";
 const DUPLICATE_DOWNLOAD = /\.theme\s?\([0-9]+\)\.css/;
 
 /**
- * Reads every theme in `bd/themes` into the store. Individual files fail
- * in isolation, so the only rejection path is a missing plugin store.
+ * The filenames this loader has registered, mapped to the store's theme ids.
+ * Core keeps it in step with what it registers and unregisters; it cannot be
+ * derived from `store.list()`, because another adapter may hold a file with
+ * the same name in its own directory.
+ */
+const registered = new Map<string, string>();
+
+/** Reports every file the loader could not register, one line each. */
+function reportSkipped(skipped: readonly ThemeSkip[]): void {
+  for (const { filename, reason } of skipped) {
+    adapterLogger.warn(`${filename}: skipped — ${reason}`);
+  }
+}
+
+/** Admission rule: themes plus the browser downloads the reader warns about. */
+function isBdThemeFile(filename: string): boolean {
+  return filename.endsWith(THEME_EXTENSION) || DUPLICATE_DOWNLOAD.test(filename);
+}
+
+/** The one directory pass — first load, reconcile, and reload all use it. */
+function directoryPass(store: IonThemesApi, files: ShellFileApi) {
+  return {
+    store,
+    files,
+    dir: THEME_DIR,
+    readTheme: readBdTheme,
+    accepts: isBdThemeFile,
+    registered,
+  };
+}
+
+/**
+ * Reads every theme in `bd/themes` into the store. Individual files fail in
+ * isolation, so the only rejection paths are a missing core bundle and a
+ * missing shell bridge.
  */
 export async function loadBdThemes(): Promise<readonly string[]> {
   const store = themesStore();
@@ -33,60 +70,77 @@ export async function loadBdThemes(): Promise<readonly string[]> {
     return [];
   }
 
-  let entries: readonly string[];
-  try {
-    // Sorted so load order (and therefore style order) is deterministic.
-    entries = (await shell.files.readdir(THEME_DIR)).sort();
-  } catch (error) {
+  const result = await themeHost().syncDirectory(directoryPass(store, shell.files));
+  if (!result.ok) {
     // Expected on a fresh profile: no themes installed yet.
-    adapterLogger.log(`no ${THEME_DIR} directory (${errorMessage(error)})`);
+    adapterLogger.log(`no ${THEME_DIR} directory (${result.reason})`);
+    return [];
+  }
+  reportSkipped(result.skipped);
+  return result.loaded;
+}
+
+/**
+ * Reconciles the directory with the store: new files load, changed ones are
+ * re-read in place (keeping their persisted enablement), deleted ones are
+ * unregistered. This is what a file-change notification runs.
+ */
+export async function reconcileBdThemes(): Promise<readonly string[]> {
+  const files = window.ionShell?.files;
+  if (!files) {
+    adapterLogger.warn("no shell bridge: the bd/themes directory was not re-read");
     return [];
   }
 
-  const loaded: string[] = [];
-  for (const filename of entries) {
-    if (DUPLICATE_DOWNLOAD.test(filename)) {
-      adapterLogger.warn(
-        `${filename}: skipped — duplicate download; rename it to ${filename.replace(DUPLICATE_DOWNLOAD, THEME_EXTENSION)}`,
-      );
-      continue;
-    }
-    if (!filename.endsWith(THEME_EXTENSION)) continue;
-    const theme = await readBdTheme(shell.files, filename);
-    if (!theme) continue;
-    try {
-      store.register(theme);
-      loaded.push(theme.id);
-    } catch (error) {
-      adapterLogger.warn(`${filename}: skipped — ${errorMessage(error)}`);
-    }
+  const result = await themeHost().syncDirectory(directoryPass(themesStore(), files));
+  if (!result.ok) return [];
+  reportSkipped(result.skipped);
+  return [...result.loaded, ...result.removed];
+}
+
+/**
+ * Watches `bd/themes` for hot reload. The returned unsubscribe lives as long
+ * as the page: an adapter bundle has no teardown point.
+ */
+export function watchBdThemes(): () => void {
+  const files = window.ionShell?.files;
+  if (!files) {
+    adapterLogger.warn("no shell bridge: bd/themes is not watched for changes");
+    return () => undefined;
   }
-  return loaded;
+  return themeHost().watchDirectory({
+    files,
+    dir: THEME_DIR,
+    reconcile: () => reconcileBdThemes(),
+  });
 }
 
 /**
  * Re-reads one theme file and swaps it into the store, preserving its
  * persisted enablement (the store keeps the key across unregister).
  *
- * Resolves false — keeping the current theme running — when the file can
- * no longer be read or parsed: a bad edit must not strip a user's theme.
+ * Resolves false — keeping the current theme running — when the file can no
+ * longer be read or parsed: a bad edit must not strip a user's theme.
  */
 export async function reloadBdTheme(idOrNameOrFilename: string): Promise<boolean> {
   const store = themesStore();
   const existing = store.get(idOrNameOrFilename);
   if (!existing) return false;
-  const shell = window.ionShell;
-  if (!shell) {
+  const files = window.ionShell?.files;
+  if (!files) {
     adapterLogger.warn(`${existing.filename}: reload failed — no shell bridge`);
     return false;
   }
 
-  const fresh = await readBdTheme(shell.files, existing.filename);
-  if (!fresh) return false;
+  const fresh = await readBdTheme(files, existing.filename);
+  if (!fresh.ok) {
+    reportSkipped([{ filename: existing.filename, reason: fresh.reason }]);
+    return false;
+  }
 
   store.unregister(existing.id);
   try {
-    store.register(fresh);
+    store.register(fresh.theme);
   } catch (error) {
     // Cannot happen for a name that was unique a moment ago; restore the
     // previous theme rather than leaving the store without either.
@@ -94,32 +148,37 @@ export async function reloadBdTheme(idOrNameOrFilename: string): Promise<boolean
     store.register(existing);
     return false;
   }
+  registered.set(existing.filename, fresh.theme.id);
   return true;
 }
 
-/** Reads and parses one file; undefined (plus a one-line reason) when unusable. */
-async function readBdTheme(files: ShellFileApi, filename: string): Promise<IonTheme | undefined> {
+/** Reads and parses one file; the reason it is unusable when it is. */
+async function readBdTheme(files: ShellFileApi, filename: string): Promise<ThemeRead> {
+  if (DUPLICATE_DOWNLOAD.test(filename)) {
+    return {
+      ok: false,
+      reason: `duplicate download; rename it to ${filename.replace(DUPLICATE_DOWNLOAD, THEME_EXTENSION)}`,
+    };
+  }
+
   let source: string;
   try {
     source = await files.readFile(`${THEME_DIR}/${filename}`, "utf8");
   } catch (error) {
-    adapterLogger.warn(`${filename}: unreadable — ${errorMessage(error)}`);
-    return undefined;
+    return { ok: false, reason: `unreadable — ${errorMessage(error)}` };
   }
 
-  const read = readAddonMeta(filename, source);
-  if (!read.ok) {
-    adapterLogger.warn(`${filename}: skipped — ${read.reason}`);
-    return undefined;
-  }
-  const { meta } = read;
-  return {
-    id: bdAddonIdFor(meta.name),
-    name: meta.name,
-    description: meta.description,
-    authors: [meta.author],
-    version: meta.version,
+  // A missing header is not an error here: the parser names the theme after
+  // its file and reports it as plain CSS.
+  const header = themeHost().parseHeader(source, { filename });
+  const theme: IonTheme = {
+    id: bdAddonIdFor(header.name),
+    name: header.name,
+    description: header.description,
+    authors: [...header.authors],
+    version: header.version,
     filename,
     css: source,
   };
+  return { ok: true, theme };
 }

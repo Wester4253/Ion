@@ -11,10 +11,10 @@
  *   Vesktop's or Discord's storage.
  * - `native.openExternal` goes through Ion's allowlisted shell bridge.
  * - Vencord-managed features whose backing service belongs to Ion instead
- *   (themes directory, QuickCss, the Vencord updater, cloud sync) return
- *   empty results or descriptive failures; every one of them is documented
- *   in docs/status.md's compatibility notes. Nothing here silently pretends
- *   a feature exists.
+ *   (themes directory, QuickCss, the Vencord updater, cloud sync) either
+ *   ride on Ion's own engine or answer with a descriptive failure; every one
+ *   of them is documented in docs/status.md's compatibility notes. Nothing
+ *   here silently pretends a feature exists.
  *
  * This module must be the compat bundle's first evaluated import: the
  * vendored Settings store calls `VencordNative.settings.get()` at module
@@ -23,6 +23,19 @@
 
 const SETTINGS_KEY = "ion.vencord.settings";
 const QUICK_CSS_KEY = "ion.vencord.quickCss";
+
+// Import order is load-bearing: this module must not import anything that
+// reads `window.VencordNative` at evaluation time (the vendored Settings
+// store does). src/themes.ts only touches `window.__ION__` lazily, so it is
+// safe to pull in here — and it must be, because the theme section below
+// answers for the real files.
+import {
+  deleteVencordTheme,
+  listVencordThemes,
+  openVencordThemesFolder,
+  readVencordThemeData,
+  writeVencordTheme,
+} from "../themes";
 
 function readStorage(key: string): string | null {
   // Core's captured DOM storage, not `window.localStorage`: Discord deletes
@@ -97,13 +110,18 @@ function installVencordNative(): void {
       },
     },
     themes: {
-      getThemesList: () => Promise.resolve([]),
-      getThemeData: () => unavailable("Vencord theme management", "Ion's theme engine"),
+      // Ion's theme engine owns these files (see src/themes.ts), so the
+      // vendored API reads and writes the same directory the loader does.
+      getThemesList: () => listVencordThemes(),
+      getThemeData: (fileName) => readVencordThemeData(fileName),
+      // Upstream reads these from the OS (a Windows registry lookup that has
+      // no equivalent here); Ion has no such source, so it answers with an
+      // empty set — the same no-op this has always been.
       getSystemValues: () => Promise.resolve({}),
-      uploadTheme: () => unavailable("Vencord theme management", "Ion's theme engine"),
-      deleteTheme: () => unavailable("Vencord theme management", "Ion's theme engine"),
+      uploadTheme: (fileName, data) => writeVencordTheme(fileName, data),
+      deleteTheme: (fileName) => deleteVencordTheme(fileName),
       openFolder: () => {
-        unavailable("Vencord theme management", "Ion's theme engine").catch(() => undefined);
+        openVencordThemesFolder();
       },
     },
     updater: {

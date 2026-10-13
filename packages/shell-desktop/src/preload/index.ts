@@ -15,7 +15,7 @@ import { contextBridge, ipcRenderer, webFrame } from "electron";
 import type { ShellFileApi, ShellHost, ShellSettingsApi } from "@ion/core";
 
 import { createNodeRequire, type RequireTransport } from "./nodeRequire";
-import { IPC, type FsResult, type ShellInfo } from "../shared/ipc";
+import { IPC, type FsChange, type FsResult, type ShellInfo } from "../shared/ipc";
 
 function send(channel: string, payload?: unknown): unknown {
   const reply = ipcRenderer.sendSync(channel, payload) as FsResult<unknown> | null | undefined;
@@ -60,6 +60,26 @@ const files: ShellFileApi = {
   },
   exists(path) {
     return attempt(() => send(IPC.fsExists, { path }) as boolean);
+  },
+  watch(path, onChanged) {
+    const token = send(IPC.fsWatch, { path }) as number;
+    // Every watcher in the page shares this one channel; the token is what
+    // keeps a change for one directory away from another's listener.
+    const listener = (_event: unknown, change: FsChange): void => {
+      if (change.token !== token) return;
+      onChanged(change.changed);
+    };
+    ipcRenderer.on(IPC.fsChanged, listener);
+    return () => {
+      ipcRenderer.off(IPC.fsChanged, listener);
+      try {
+        send(IPC.fsUnwatch, { token });
+      } catch (error) {
+        // The main process already dropped it (the window is going away):
+        // there is nothing left to release and nothing the caller can do.
+        console.error("[ion] could not unwatch", path, error);
+      }
+    };
   },
 };
 

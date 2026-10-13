@@ -84,6 +84,19 @@ IndexedDB, no in-client marketplace) or from making a failure legible; none is a
 
 **What plugins see**
 
+- **A `.theme.css` with no header block is accepted as plain CSS.** Upstream
+  refuses it (`no meta comment on the first line`), so a hand-written or freshly
+  downloaded theme that skipped its header is invisible in both BetterDiscord
+  and Vencord. Ion parses the header when there is one — byte-compatible with
+  upstream's own parser — and otherwise names the theme from its file name
+  (`Radial.theme.css` → `Radial`) with no authors. Recorded because it accepts
+  files upstream does not.
+- **`VencordNative.themes` is backed by Ion's theme engine, not a stub.** Only
+  `*.css` is accepted (a `.theme.css` import reads the file the same way);
+  `deleteTheme` and `openFolder` refuse with their reason, because the file
+  bridge has no unlink and the page cannot see absolute paths. The vendored
+  Vencord settings tab's own list still drives upstream's view rather than Ion's
+  enablement — documented in docs/themes.md.
 - **`plugin.store` is a mutable proxy over a Solid store, not a valtio proxy.**
   Upstream's store is valtio-backed, which mutates in place and drives Solid
   through signals valtio's subscription updates. Solid's own `createStore`

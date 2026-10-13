@@ -31,9 +31,9 @@ enforced), translates each definition into an Ion plugin manifest (upstream's
 `startAt` → Ion stages, implicit API dependencies, `$self` binding), and ships as
 one IIFE that the shell injects after core and ui. `window.Vencord` mirrors
 upstream's renderer namespace; `window.VencordNative` is Ion's shim
-(localStorage-backed settings and quickCss, themes/updater reported as
-"handled by Ion", `openExternal` via the shell, clipboard intentionally
-absent — no token-adjacent surface).
+(localStorage-backed settings and quickCss, themes now backed by Ion's own
+theme engine — see docs/themes.md — `openExternal` via the shell, clipboard
+intentionally absent — no token-adjacent surface).
 
 **Measured result** (fresh isolated profile, no login, all 32 enabled through
 the settings seed, 180s read-only soak): 33/33 plugins registered (32 Vencord +

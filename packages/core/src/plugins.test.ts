@@ -32,6 +32,10 @@ function fakeFiles(initial: Record<string, unknown> | undefined): ShellFileApi {
     exists(path) {
       return Promise.resolve(content !== undefined && path === SETTINGS_PATH);
     },
+    watch() {
+      // Plugin tests never watch; the bridge declares it, so it exists.
+      return () => undefined;
+    },
   };
 }
 

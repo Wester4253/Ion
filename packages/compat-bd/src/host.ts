@@ -9,7 +9,13 @@
  * import (the `@ion/core` dependency is types-only).
  */
 
-import type { DomStorage, IonDiscoveryApi, IonPluginsApi, IonThemesApi } from "@ion/core";
+import type {
+  DomStorage,
+  IonDiscoveryApi,
+  IonPluginsApi,
+  IonThemeHostApi,
+  IonThemesApi,
+} from "@ion/core";
 
 function missing(detail: string): Error {
   return new Error(`[ion] compat-bd requires the Ion core bundle (${detail} is missing)`);
@@ -33,6 +39,17 @@ export function pluginsHost(): IonPluginsApi {
 export function themesStore(): IonThemesApi {
   const api = window.__ION__?.themes;
   if (!api) throw missing("window.__ION__.themes");
+  return api;
+}
+
+/**
+ * The shared half of the theme engine (header parsing, directory sync, hot
+ * reload). Adapters reach it through the host because they must never bundle
+ * core a second time; see `IonThemeHostApi`.
+ */
+export function themeHost(): IonThemeHostApi {
+  const api = window.__ION__?.themeHost;
+  if (!api) throw missing("window.__ION__.themeHost");
   return api;
 }
 

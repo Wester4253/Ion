@@ -37,11 +37,11 @@ interface VencordNativeApi {
     openEditor(): void;
   };
   readonly themes: {
-    getThemesList(): Promise<never[]>;
-    getThemeData(): Promise<never>;
+    getThemesList(): Promise<readonly import("./themes").VencordUserThemeHeader[]>;
+    getThemeData(fileName: string): Promise<string>;
     getSystemValues(): Promise<Record<string, string | undefined>>;
-    uploadTheme(): Promise<never>;
-    deleteTheme(): Promise<never>;
+    uploadTheme(fileName: string, data: string): Promise<void>;
+    deleteTheme(fileName: string): Promise<void>;
     openFolder(): void;
   };
   readonly updater: {

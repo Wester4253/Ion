@@ -109,6 +109,21 @@ back into `@ion/core`, so the bundle stays acyclic). Honesty note: source
 patches are one-way once a module has evaluated — disabling removes remaining
 patches, but `stop()` owns runtime reversion of what already applied.
 
+## Themes
+
+One engine in `packages/core/src/themes.ts` owns every theme regardless of
+source: persisted enablement (`themes.enabled.<id>`), DOM injection (one
+`<style data-ion-theme>` per enabled theme, plus one `data-ion-theme-base`
+carrying the `--ion-theme-*` tokens themes may rely on), and change
+notification. The header parser (`themeHeaders.ts`) understands
+BetterDiscord's, Vencord's, and plain-CSS-with-no-header files; directory
+sync and the debounced file watcher (150 ms, `ion:fs:watch` /
+`ion:fs:changed` / `ion:fs:unwatch` behind the preload's
+`files.watch()`) re-register what changed. Adapters own only their directory
+and reach the shared engine through `window.__ION__.themeHost`, because they
+must never bundle core a second time. Full rules and the variable table:
+docs/themes.md.
+
 ## In-Discord UI (settings page)
 
 `packages/ui` renders Ion's in-Discord UI with Preact and ships as a second

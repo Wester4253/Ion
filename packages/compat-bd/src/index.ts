@@ -13,7 +13,7 @@
 
 import { BdApi } from "./api";
 import { adapterLogger, pluginManager } from "./manager/pluginmanager";
-import { loadBdThemes } from "./manager/themes";
+import { loadBdThemes, watchBdThemes } from "./manager/themes";
 
 declare global {
   interface Window {
@@ -42,3 +42,8 @@ void pluginManager.initialize().catch((error: unknown) => {
 void loadBdThemes().catch((error: unknown) => {
   adapterLogger.error("BetterDiscord theme loading aborted", error);
 });
+
+// Editing a theme file in bd/themes reloads it in place. There is no
+// teardown point in an adapter bundle, so the subscription outlives nothing
+// and is never released; a shell without the watch channel keeps the load.
+watchBdThemes();

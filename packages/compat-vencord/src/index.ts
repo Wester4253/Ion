@@ -21,6 +21,7 @@
 
 import "./shims/globals";
 
+import { loadVencordThemes, watchVencordThemes } from "./themes";
 import { PlainSettings, Settings } from "@api/Settings";
 import { initStyles } from "@api/Styles";
 import { Logger } from "@utils/Logger";
@@ -83,3 +84,12 @@ function registerAcceptancePlugins(): void {
 // root and wires the (shimmed) renderer CSS.
 initStyles();
 registerAcceptancePlugins();
+
+// Vencord's own themes folder: the same store BetterDiscord's themes land in,
+// loaded through core's shared engine, then watched so editing a file
+// reloads it in place (an adapter bundle has no teardown point, so the
+// subscription outlives nothing).
+void loadVencordThemes().catch((error: unknown) => {
+  logger.error("Vencord theme loading aborted", error);
+});
+watchVencordThemes();

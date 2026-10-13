@@ -10,6 +10,8 @@
  */
 
 import type { Logger } from "../logging";
+import type { ParseThemeHeaderOptions, ThemeHeader } from "../themeHeaders";
+import type { ThemeDirectoryOptions, ThemeSyncResult, ThemeWatchOptions } from "../themes";
 import type { Patch, PatchStatsApi } from "../patches";
 import type { PluginSettings } from "../settings";
 import type { DomStorage } from "../storage";
@@ -41,6 +43,18 @@ export interface ShellFileApi {
   /** Creates a directory (and parents). Rejects out-of-scope paths. */
   mkdir(path: string): Promise<void>;
   exists(path: string): Promise<boolean>;
+  /**
+   * Subscribes to changes under `path` (a file or directory inside the Ion
+   * data dir; not recursive, because Linux `fs.watch` cannot be). The shell
+   * notifies with the Ion-data-relative path of every changed entry; Ion
+   * re-reads and re-registers what it finds. Returns the unsubscribe.
+   *
+   * Throws when the shell refuses the path or cannot watch at all — hot
+   * reload is an enhancement, so callers degrade to one-shot loading. The
+   * notifications name paths the caller may already read through this same
+   * bridge, so watching grants no access it did not have.
+   */
+  watch(path: string, onChanged: (changed: readonly string[]) => void): () => void;
 }
 
 /**
@@ -289,6 +303,23 @@ export interface IonDiscoveryApi {
   readonly onceReady: Promise<void>;
 }
 
+/**
+ * The format-neutral half of the theme engine, exposed for adapters.
+ *
+ * Adapters must never bundle core — a second copy would duplicate the plugin
+ * host and the patch registry — and the header parser, the directory sync and
+ * the file watcher are shared by every theme format, so they ride on the host
+ * global instead of a package import.
+ */
+export interface IonThemeHostApi {
+  /** Parses a theme file's header, or falls back to plain CSS. */
+  parseHeader(css: string, options?: ParseThemeHeaderOptions): ThemeHeader;
+  /** Reconciles one adapter-owned directory with the theme store. */
+  syncDirectory(options: ThemeDirectoryOptions): Promise<ThemeSyncResult>;
+  /** Subscribes to one adapter-owned directory for hot reload. */
+  watchDirectory(options: ThemeWatchOptions): () => void;
+}
+
 /** Injected by the core bundle as proof that it ran in the main world. */
 export interface IonGlobal {
   readonly version: string;
@@ -297,6 +328,8 @@ export interface IonGlobal {
   plugins?: IonPluginsApi;
   /** The theme store adapters register their themes with. */
   themes?: IonThemesApi;
+  /** The shared theme ingestion helpers; see {@link IonThemeHostApi}. */
+  themeHost?: IonThemeHostApi;
   /** Per-plugin patch telemetry (applied/active/notices) for the harness. */
   patches?: PatchStatsApi;
   /** Module discovery for adapters, which must not re-bundle the core. */

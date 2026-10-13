@@ -9,6 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { IonPlugin } from "@ion/core";
 
+// The theme loader parses through core's shared engine, which the adapter
+// reaches on the host global (adapters never bundle core at runtime), so the
+// suite installs the real one.
+import { parseThemeHeader, syncThemeDirectory, watchThemesDir } from "@ion/core";
 import {
   CLASS_BODY,
   ctx,
@@ -39,10 +43,27 @@ function themeHeader(name: string): string {
 let counters: Counters;
 let store: FakeThemeStore;
 
+/** Installs the real shared theme engine the loader runs against. */
+function installThemeEngine(): void {
+  const current = window.__ION__ ?? {};
+  Object.defineProperty(window, "__ION__", {
+    configurable: true,
+    value: {
+      ...current,
+      themeHost: {
+        parseHeader: parseThemeHeader,
+        syncDirectory: syncThemeDirectory,
+        watchDirectory: watchThemesDir,
+      },
+    },
+  });
+}
+
 beforeEach(() => {
   counters = resetCounters();
   store = fakeThemeStore();
   installThemes(store);
+  installThemeEngine();
   vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);

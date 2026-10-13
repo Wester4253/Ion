@@ -9,8 +9,9 @@
  */
 
 import { app, ipcMain, shell } from "electron";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, watch, writeFileSync } from "node:fs";
+import type { FSWatcher } from "node:fs";
+import { dirname, posix } from "node:path";
 
 import { loadCoreBundle } from "./bundle";
 import { isAllowedExternalUrl, isAllowedNavigation } from "./navigation";
@@ -19,9 +20,11 @@ import { applyShellSettingsPatch, isShellSettingKey } from "./settingsSchema";
 import { shellDataDir, type ShellSettingsStore } from "./store";
 import {
   IPC,
+  type FsChange,
   type FileEncoding,
   type FsReadRequest,
   type FsResult,
+  type FsUnwatchRequest,
   type FsWriteRequest,
   type ShellInfo,
 } from "../shared/ipc";
@@ -47,6 +50,11 @@ function parseWriteRequest(raw: unknown): FsWriteRequest | null {
 
 function parsePathOnly(raw: unknown): string | null {
   return isRecord(raw) && typeof raw["path"] === "string" ? raw["path"] : null;
+}
+
+function parseUnwatchRequest(raw: unknown): FsUnwatchRequest | null {
+  if (!isRecord(raw) || typeof raw["token"] !== "number") return null;
+  return { token: raw["token"] };
 }
 
 function fail<T>(error: unknown): FsResult<T> {
@@ -204,6 +212,75 @@ export function registerIpcHandlers(context: IpcContext): void {
       raw,
       (abs) => ({ ok: true, value: existsSync(abs) }) satisfies FsResult<boolean>,
     );
+  });
+
+  // Live subscriptions. `fs.watch` is not recursive — Linux refuses the
+  // option outright — and both theme directories are flat, which is all Ion
+  // watches. The token is what the renderer hands back to unsubscribe.
+  const watchers = new Map<number, FSWatcher>();
+  let nextWatchToken = 1;
+
+  ipcMain.on(IPC.fsWatch, (event, raw) => {
+    if (!senderIsTrusted(event)) {
+      event.returnValue = fail(new Error("untrusted sender"));
+      return;
+    }
+    const relative = parsePathOnly(raw);
+    if (relative === null) {
+      event.returnValue = { ok: false, error: "invalid path" } satisfies FsResult<never>;
+      return;
+    }
+    const abs = resolveScopedPath(root, relative);
+    if (abs === null) {
+      event.returnValue = {
+        ok: false,
+        error: "path escapes the Ion data directory",
+      } satisfies FsResult<never>;
+      return;
+    }
+
+    const token = nextWatchToken++;
+    try {
+      const watcher = watch(abs, (_type, file) => {
+        // `file` is null when the watched directory itself moved; there is
+        // nothing a re-read could act on, so the event is dropped.
+        if (file === null) return;
+        const change: FsChange = { token, changed: [posix.join(relative, file)] };
+        event.sender.send(IPC.fsChanged, change);
+      });
+      watchers.set(token, watcher);
+      // A renderer that goes away without unwatching must not leak a handle.
+      event.sender.once("destroyed", () => {
+        if (watchers.delete(token)) watcher.close();
+      });
+      event.returnValue = { ok: true, value: token } satisfies FsResult<number>;
+    } catch (error) {
+      // A path that is not watchable (missing, or a filesystem that refuses
+      // inotify handles) leaves the adapter with the load it already did.
+      event.returnValue = fail<never>(error);
+    }
+  });
+
+  ipcMain.on(IPC.fsUnwatch, (event, raw) => {
+    if (!senderIsTrusted(event)) {
+      event.returnValue = fail(new Error("untrusted sender"));
+      return;
+    }
+    const request = parseUnwatchRequest(raw);
+    if (request === null) {
+      event.returnValue = { ok: false, error: "invalid watch request" } satisfies FsResult<never>;
+      return;
+    }
+    const watcher = watchers.get(request.token);
+    // Already closed (a destroyed renderer, or a double unsubscribe):
+    // closing is idempotent from the caller's side, so this is a success.
+    if (watcher === undefined) {
+      event.returnValue = { ok: true, value: undefined } satisfies FsResult<undefined>;
+      return;
+    }
+    watchers.delete(request.token);
+    watcher.close();
+    event.returnValue = { ok: true, value: undefined } satisfies FsResult<undefined>;
   });
 
   // -- async channels -------------------------------------------------------
