@@ -114,6 +114,13 @@ IndexedDB, no in-client marketplace) or from making a failure legible; none is a
   label and stay unattributed. The scope is set for module evaluation, `onLoad`,
   `onUnload`, and every callback handed to the scoped API — a callback that reaches the
   page by some other route still prints unattributed, visible rather than guessed at.
+- **`shelter.util.log`'s gradient is dropped.** Upstream hands the label's gradient to
+  `%c`. Chromium's captured `console-message` cannot apply a style, so it keeps the format
+  specifier _and_ inlines the style into the text: every captured line came back as
+  `%c[Antitrack]%c background: linear-gradient(…) …`, burying the label in what was then
+  noise. The label now prints as plain text so it survives the capture — the harness
+  attributes a message by its `[Name]` prefix, and the scoreboard's evidence column is only
+  as readable as the line it was handed.
 - **`shelter.patcher` has no `unpatchAll`.** Upstream exposes it; Ion excludes it because
   the scoped API already records and replays every unpatch a plugin is handed, and a
   global unpatch-all would reach patches owned by other plugins. The three members plugins

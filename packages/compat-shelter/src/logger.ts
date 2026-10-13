@@ -4,11 +4,18 @@
  * Two things live here because they are the same concern: which line gets
  * printed, and whose name it carries.
  *
- * Shelter's `util.log` prints `%c<Label>%c` followed by the message, and
- * Chromium's captured `console-message` keeps the format specifiers. The
- * compat harness strips `%c` and attributes a message that starts with
- * `[Name]` to that plugin — so the label is a compatibility contract, not a
- * style choice. Upstream always prints `shelter`; here the label is the
+ * Shelter's `util.log` prints `%c<Label>%c` followed by the message, with
+ * the label's gradient handed over as a `%c` argument. Chromium's captured
+ * `console-message` cannot apply a style, so it keeps the format specifier
+ * *and* inlines the style into the text, leaving every captured line as
+ * `%c[Antitrack]%c background: linear-gradient(…) …` — where the label, the
+ * only part that carries information, is buried in what is now noise. So the
+ * gradient is dropped and the label prints as plain text: `[Name] message`.
+ * That is a deliberate deviation from upstream's look, and its reason is
+ * evidence rather than taste: the compat harness attributes a captured
+ * message that starts with `[Name]` to that plugin, so the label is a
+ * compatibility contract, and it has to survive the capture intact. Upstream
+ * always prints `shelter`; here the label is the
  * display name of the plugin whose code is running, which is what makes a
  * plugin's own warnings and errors land on its row of the scoreboard
  * instead of in the run's unattributed bucket. Messages printed outside any
@@ -25,11 +32,6 @@
 /* eslint-disable no-console -- compat-shelter's sole console access point;
    shelter's log() output format is a compatibility contract consumed by the
    compat harness, exactly like compat-bd's logger. */
-
-/** Label style: shelter's own gradient, unchanged. */
-const SHELTER_STYLE =
-  "background: linear-gradient(180deg, #2A3B4B 0%, #2BFAAC 343.17%); color: white; padding: 6px; border-radius: 4px;";
-const MESSAGE_STYLE = "";
 
 /** The plugin whose code is on the stack right now. */
 export interface PluginScope {
@@ -77,8 +79,15 @@ export function wrapInPluginScope<A extends unknown[], R>(
 type Level = "info" | "log" | "warn" | "error";
 
 /** Prints one attributed line: `%c[Label]%c` + payload. */
+/**
+ * One line to the console, label first.
+ *
+ * Deliberately free of `%c` and its style arguments — see the header for
+ * why. Everything else about upstream's shape is kept: the label in square
+ * brackets, then the message, spread when it was given as an array.
+ */
 function print(label: string, level: Level, messages: readonly unknown[]): void {
-  console[level](`%c[${label}]%c`, SHELTER_STYLE, MESSAGE_STYLE, ...messages);
+  console[level](`[${label}]`, ...messages);
 }
 
 /**
