@@ -52,6 +52,7 @@ import { fileURLToPath } from "node:url";
 
 import { renderCompatMarkdown } from "./markdown";
 import { analyze, type AcceptanceEntry, type Ecosystem, type SmokeReport } from "./report";
+import { SHELTER_INDEX_DIAGNOSES } from "./shelter-diagnoses";
 
 const DEFAULT_SETTLE_MS = 180_000;
 /** Slack on top of the soak before the smoke's own timeout fires. */
@@ -542,12 +543,19 @@ async function stageShelterIndex(
       // it attributes have to agree, or a plugin's own warnings land in the
       // run's unattributed bucket instead of on its row.
       const registeredName = manifest.ok ? manifestNameOf(manifest.bytes) : undefined;
+      const entryId = `shelter.${folder}`;
       entries.push({
         group: "bulk",
         name: registeredName ?? folder,
-        id: `shelter.${folder}`,
+        id: entryId,
         url,
         ...(manifest.ok ? {} : { note: `manifest not published: plugin.json ${manifest.reason}` }),
+        // A sweep's entries are generated, so they cannot carry the diagnosis
+        // the pinned acceptance file holds; the hand-written ones live beside
+        // their measured reason, never instead of it.
+        ...(SHELTER_INDEX_DIAGNOSES[entryId]
+          ? { diagnosis: SHELTER_INDEX_DIAGNOSES[entryId] }
+          : {}),
       });
     }
   }
