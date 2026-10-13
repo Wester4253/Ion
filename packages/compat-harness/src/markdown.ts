@@ -6,10 +6,22 @@
  * one-line reason, the by-design errors, and the owner's Tier 3 checklist.
  */
 
-import type { CompatReport } from "./report";
+import type { CompatPluginReport, CompatReport } from "./report";
 
 function escapeCell(value: string): string {
   return value.replace(/\|/g, "\\|");
+}
+
+/**
+ * The explanation column. A hand-written diagnosis always leads when one
+ * exists, but the measured reason is kept next to it — the scoreboard explains
+ * itself without dropping the evidence the run produced.
+ */
+function reasonCell(plugin: CompatPluginReport): string {
+  const measured = plugin.reason;
+  if (plugin.diagnosis === null) return measured === null ? "—" : escapeCell(measured);
+  if (measured === null) return escapeCell(plugin.diagnosis);
+  return `${escapeCell(plugin.diagnosis)} — measured: ${escapeCell(measured)}`;
 }
 
 function verdictCell(verdict: "pass" | "fail" | "not-run"): string {
@@ -55,11 +67,11 @@ export function renderCompatMarkdown(report: CompatReport): string {
   );
   lines.push("| --- | --- | --- | --- | --- | --- | --- |");
   for (const plugin of report.plugins) {
-    const reason = plugin.reason === null ? "—" : escapeCell(plugin.reason);
     const hand = escapeCell(plugin.handCheck);
     lines.push(
       `| ${escapeCell(plugin.name)} | ${plugin.group} | ${verdictCell(plugin.tier1)} ` +
-        `| ${verdictCell(plugin.tier2)} | ${statusCell(plugin.status)} | ${reason} | ${hand} |`,
+        `| ${verdictCell(plugin.tier2)} | ${statusCell(plugin.status)} | ${reasonCell(plugin)} ` +
+        `| ${hand} |`,
     );
   }
   lines.push("");

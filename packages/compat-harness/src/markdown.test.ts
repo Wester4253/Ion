@@ -69,6 +69,48 @@ describe("renderCompatMarkdown", () => {
     expect(markdown).toContain("Nothing in this document is Tier-3-verified.");
   });
 
+  test("leads a failure with its diagnosis but keeps the measured reason", () => {
+    const failed = renderCompatMarkdown(
+      analyze(
+        {
+          session: "logged-out",
+          settleMs: TIER2_MIN_SOAK_MS,
+          pluginsStatus: {
+            status: { registered: 2, started: 0, failed: 2 },
+            ids: ["bd.BetterFolders:failed", "bd.LiveTyping:failed"],
+            failures: [
+              { id: "bd.BetterFolders", error: "Cannot read properties of undefined" },
+              { id: "bd.LiveTyping", error: "Cannot set property A" },
+            ],
+          },
+          rendererErrors: [],
+          expectedErrors: {},
+          warnings: [],
+          patchStats: {},
+        },
+        [
+          {
+            group: "A",
+            name: "BetterFolders",
+            id: "bd.BetterFolders",
+            diagnosis: "Needs a signed-in session to measure.",
+          },
+          { group: "A", name: "LiveTyping", id: "bd.LiveTyping" },
+        ],
+        {
+          generatedAt: "2026-10-13T00:00:00.000Z",
+          ecosystem: "bd",
+          upstream: "133bc83 (Apache-2.0 port of BdApi)",
+        },
+      ),
+    );
+
+    // The explanation leads, but the run's own evidence stays attached to it.
+    expect(failed).toContain("Needs a signed-in session to measure. — measured: start failed:");
+    // With no diagnosis the measured reason is the whole cell, as before.
+    expect(failed).toContain("start failed: Cannot set property A |");
+  });
+
   test("titles a BetterDiscord report with its own ecosystem labels", () => {
     const bd = renderCompatMarkdown(
       analyze(

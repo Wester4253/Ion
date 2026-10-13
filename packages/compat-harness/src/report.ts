@@ -33,6 +33,13 @@ export interface AcceptanceEntry {
    */
   readonly id?: string;
   readonly note?: string;
+  /**
+   * One hand-written line explaining a measured failure, stored next to the
+   * URL and hash it applies to so it cannot outlive the version it describes.
+   * Rendered next to — never instead of — the measured reason, so the
+   * scoreboard explains itself without losing the evidence.
+   */
+  readonly diagnosis?: string;
   readonly tier3?: string;
   /** BetterDiscord: raw URL the harness downloads and stages (sha256-pinned). */
   readonly url?: string;
@@ -91,6 +98,8 @@ export interface CompatPluginReport {
   readonly status: PluginStatus;
   /** One line; non-null for every non-pass status and every warning. */
   readonly reason: string | null;
+  /** Hand-written explanation from the acceptance set, when one exists. */
+  readonly diagnosis: string | null;
   /** Host lifecycle state, or null when the plugin never registered. */
   readonly state: string | null;
   readonly startError: string | null;
@@ -304,6 +313,7 @@ export function analyze(
       tier2,
       status,
       reason,
+      diagnosis: entry.diagnosis ?? null,
       state,
       startError,
       patches: {

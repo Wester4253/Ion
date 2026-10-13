@@ -32,6 +32,7 @@
       "id": "bd.BetterFolders",
       "url": "https://raw.githubusercontent.com/Zerthox/BetterDiscord-Plugins/7c5f6e4ad7cada88974885daf2bfaedae2658a73/dist/bd/BetterFolders.plugin.js",
       "sha256": "ba1f4977ed76f56ef4117bfa0a1301ec306a90aca9beef1baa1b2b50b2a1a71a",
+      "diagnosis": "Reads Discord's guild-list CSS module (`byKeys([\"guilds\", \"base\"])`) at start; that module is absent from the logged-out login build, so the failure cannot be attributed here — re-measure signed in.",
       "tier3": "Server folders behave normally; the plugin's settings panel opens and folder options apply."
     },
     {
@@ -72,6 +73,7 @@
       "id": "bd.LiveTyping",
       "url": "https://raw.githubusercontent.com/zrodevkaan/BDPlugins/586d86b9df7d56a7cb11a80490f8f8db7f39bafa/Plugins/LiveTyping/LiveTyping.plugin.js",
       "sha256": "9bce1c2085fd5d947e9d22398e0c9b84450aa9866a74b8c722adcce0f077516d",
+      "diagnosis": "Patches a Discord export (`ChannelElement.A`) that the current build exposes as a getter-only accessor; upstream BetterDiscord's Patcher performs the same plain assignment and fails identically, so this is not an Ion gap.",
       "tier3": "While the other side types, their in-progress text appears live under the channel header."
     },
     {
@@ -80,6 +82,7 @@
       "id": "bd.ChannelTabs",
       "url": "https://raw.githubusercontent.com/samfundev/BetterDiscordStuff/b2485111e095270d51265d1b65e7dc26c8251562/Plugins/ChannelTabs/ChannelTabs.plugin.js",
       "sha256": "01ab24714c62ee055668a1ff05aec2504634c10e99d0b2aeee0abd5f673a81f1",
+      "diagnosis": "Registers and starts, then throws on its own logged-out retry path: it reads an undeclared `config` (`BdApi.Plugins.isEnabled(config.info.name)`) when no user is present, which leaves `this.settings` unset for the later `onSwitch()`.",
       "tier3": "A tab bar appears above the chat; opening channels adds tabs, clicking a tab switches channels."
     }
   ]
