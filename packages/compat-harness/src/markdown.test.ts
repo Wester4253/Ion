@@ -29,7 +29,11 @@ function report() {
       patchStats: {},
     },
     ACCEPTANCE,
-    { generatedAt: "2026-10-12T00:00:00.000Z", upstream: "1.15.11 (16ec4ea)" },
+    {
+      generatedAt: "2026-10-12T00:00:00.000Z",
+      ecosystem: "vencord",
+      upstream: "1.15.11 (16ec4ea)",
+    },
   );
 }
 
@@ -63,5 +67,33 @@ describe("renderCompatMarkdown", () => {
   test("ends with the method section that keeps Tier 3 marked pending", () => {
     expect(markdown).toContain("## Method");
     expect(markdown).toContain("Nothing in this document is Tier-3-verified.");
+  });
+
+  test("titles a BetterDiscord report with its own ecosystem labels", () => {
+    const bd = renderCompatMarkdown(
+      analyze(
+        {
+          session: "logged-out",
+          settleMs: TIER2_MIN_SOAK_MS,
+          pluginsStatus: {
+            status: { registered: 1, started: 1, failed: 0 },
+            ids: ["bd.BlurNSFW:started"],
+            failures: [],
+          },
+          rendererErrors: [],
+          expectedErrors: {},
+          warnings: [],
+          patchStats: {},
+        },
+        [{ group: "A", name: "BlurNSFW", id: "bd.BlurNSFW" }],
+        {
+          generatedAt: "2026-10-12T00:00:00.000Z",
+          ecosystem: "bd",
+          upstream: "133bc83 (Apache-2.0 port of BdApi)",
+        },
+      ),
+    );
+    expect(bd).toContain("## BetterDiscord acceptance set");
+    expect(bd).toContain("BetterDiscord source 133bc83");
   });
 });

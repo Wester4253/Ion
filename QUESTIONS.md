@@ -65,3 +65,26 @@ on everything unblocked; only truly blocking items stop the run.
 - Per your instruction: **deferred, blocked on screenshare audio** (Linux
   PipeWire system-audio screenshare). Not guessed at, not partially
   implemented; recorded as `deferred` in the scoreboard.
+
+## Q4: BetterDiscord starter set (Phase 7 measurement)
+
+- **Question**: AGENTS.md's compatibility testing rule says the BD starter
+  set is 5–10 popular real plugins, proposed for your approval before the
+  bulk harness work. Here is the proposed set — approve, edit, or replace:
+  BlurNSFW, APlatformIndicators, GameActivityToggle, BetterFolders,
+  InvisibleTyping, PinDMs, Translator, DoNotTrack, LiveTyping, ChannelTabs.
+- **Why it matters**: these ten anchor the first measured BD scoreboard;
+  they span five independent authors and both hand-rolled and
+  compiler-built plugin sources, so failures point at real API gaps rather
+  than one author's style.
+- **Options**:
+  1. (a) Proposed: the ten above (pinned-commit raw URLs + sha256 in
+     `packages/compat-bd/acceptance.json`, downloaded and hash-verified by
+     the harness at run time — nothing is vendored).
+  2. (b) Trim to a smaller core (e.g. BlurNSFW, BetterFolders,
+     InvisibleTyping, ChannelTabs) for a faster first loop.
+  3. (c) A different list — tell me the names.
+- **Recommended default**: (a).
+- **Status**: proceeding with (a) to keep the measurement unblocked; the
+  scoreboard records exactly how each of the ten fared, and your edit later
+  just changes the acceptance file and reruns the harness.

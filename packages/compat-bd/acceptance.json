@@ -1,0 +1,86 @@
+{
+  "source": "https://betterdiscord.app/plugins — raw URLs taken from each plugin's page and pinned to a commit; sha256 verified by the harness before staging",
+  "note": "BD starter set (5-10 popular real plugins, per AGENTS.md). Owner approval pending in QUESTIONS.md Q1; this is the recommended default and was used to keep moving. Every entry downloads at run time — nothing is vendored into the repository.",
+  "entries": [
+    {
+      "group": "A",
+      "name": "BlurNSFW",
+      "id": "bd.BlurNSFW",
+      "url": "https://raw.githubusercontent.com/zerebos/BetterDiscordAddons/c1488d0c8d143fb43cb70175f92062e184737a47/Plugins/BlurNSFW/BlurNSFW.plugin.js",
+      "sha256": "7c94450550d1808cca17648458c9f123cbd479f96d13c128c774f4eb27c9b34e",
+      "tier3": "Open a NSFW-marked channel: its media must be blurred until hovered; other channels unaffected."
+    },
+    {
+      "group": "A",
+      "name": "APlatformIndicators",
+      "id": "bd.APlatformIndicators",
+      "url": "https://raw.githubusercontent.com/Strencher/BetterDiscordStuff/fa8178549232a4bb4d2d93189a78d267d087f651/PlatformIndicators/APlatformIndicators.plugin.js",
+      "sha256": "a50570e226a781af407dcdff4561ed1681d3edab13332f9a8759e4b6731d8254",
+      "tier3": "Member list and chat authors show platform dots/badges (desktop, web, mobile); settings panel opens."
+    },
+    {
+      "group": "A",
+      "name": "GameActivityToggle",
+      "id": "bd.GameActivityToggle",
+      "url": "https://raw.githubusercontent.com/mwittrien/BetterDiscordAddons/c2c3d925ef95a1cac6ece3ceea14d5d473f49c99/Plugins/GameActivityToggle/GameActivityToggle.plugin.js",
+      "sha256": "221071eb5e924c2d51be659d111884cfe04bffb04f31df491feafdc5b286cf2c",
+      "tier3": "The games panel shows a toggle that hides/shows the current activity; setting persists across restart."
+    },
+    {
+      "group": "A",
+      "name": "BetterFolders",
+      "id": "bd.BetterFolders",
+      "url": "https://raw.githubusercontent.com/Zerthox/BetterDiscord-Plugins/7c5f6e4ad7cada88974885daf2bfaedae2658a73/dist/bd/BetterFolders.plugin.js",
+      "sha256": "ba1f4977ed76f56ef4117bfa0a1301ec306a90aca9beef1baa1b2b50b2a1a71a",
+      "tier3": "Server folders behave normally; the plugin's settings panel opens and folder options apply."
+    },
+    {
+      "group": "A",
+      "name": "InvisibleTyping",
+      "id": "bd.InvisibleTyping",
+      "url": "https://raw.githubusercontent.com/Strencher/BetterDiscordStuff/3b9422782a4e93d28c02340d47b243be2ab3afd4/InvisibleTyping/InvisibleTyping.plugin.js",
+      "sha256": "74b104ac2425e13e55bd91a06746216fc50348a8e80145d449a86127aae9ccf1",
+      "tier3": "While typing, the other side must NOT see the typing indicator; toggling the plugin restores it."
+    },
+    {
+      "group": "A",
+      "name": "PinDMs",
+      "id": "bd.PinDMs",
+      "url": "https://raw.githubusercontent.com/mwittrien/BetterDiscordAddons/2c2b9cde5a745efcca3d40dae4a6dd644d8ef391/Plugins/PinDMs/PinDMs.plugin.js",
+      "sha256": "7a6eeb1e3f471155679818a7e1acca550f2d65084bab96f7c17552414fdc6d9c",
+      "tier3": "Right-click a DM → pin: it moves to a pinned section at the top of the DM list and survives restart."
+    },
+    {
+      "group": "A",
+      "name": "Translator",
+      "id": "bd.Translator",
+      "url": "https://raw.githubusercontent.com/mwittrien/BetterDiscordAddons/e5239fcf364a7f69b455bc9a6178b554e08f67ca/Plugins/Translator/Translator.plugin.js",
+      "sha256": "72426e21fc87e3c8243d5be00297a7666a0fa5ccb2f9a403ddfcaf6c4bd45206",
+      "tier3": "Foreign-language messages show a translate affordance; translating swaps the text and sends translated text outbound."
+    },
+    {
+      "group": "A",
+      "name": "DoNotTrack",
+      "id": "bd.DoNotTrack",
+      "url": "https://raw.githubusercontent.com/zerebos/BetterDiscordAddons/6d839d0ab65371819b081218bc43b09d7d6e762d/Plugins/DoNotTrack/DoNotTrack.plugin.js",
+      "sha256": "6731d7a48ec8226779abf8251a22dcde30121613f21ffc5fcf3f45ed3fce7293",
+      "tier3": "The plugin's settings show the tracking endpoints it blocks; no page-load errors while browsing."
+    },
+    {
+      "group": "A",
+      "name": "LiveTyping",
+      "id": "bd.LiveTyping",
+      "url": "https://raw.githubusercontent.com/zrodevkaan/BDPlugins/586d86b9df7d56a7cb11a80490f8f8db7f39bafa/Plugins/LiveTyping/LiveTyping.plugin.js",
+      "sha256": "9bce1c2085fd5d947e9d22398e0c9b84450aa9866a74b8c722adcce0f077516d",
+      "tier3": "While the other side types, their in-progress text appears live under the channel header."
+    },
+    {
+      "group": "A",
+      "name": "ChannelTabs",
+      "id": "bd.ChannelTabs",
+      "url": "https://raw.githubusercontent.com/samfundev/BetterDiscordStuff/b2485111e095270d51265d1b65e7dc26c8251562/Plugins/ChannelTabs/ChannelTabs.plugin.js",
+      "sha256": "01ab24714c62ee055668a1ff05aec2504634c10e99d0b2aeee0abd5f673a81f1",
+      "tier3": "A tab bar appears above the chat; opening channels adds tabs, clicking a tab switches channels."
+    }
+  ]
+}

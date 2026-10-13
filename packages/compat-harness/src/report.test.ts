@@ -22,7 +22,11 @@ const OK = {
   patchStats: {},
 } satisfies SmokeReport;
 
-const OPTIONS = { generatedAt: "2026-10-12T00:00:00.000Z", upstream: "1.15.11 (16ec4ea)" };
+const OPTIONS = {
+  generatedAt: "2026-10-12T00:00:00.000Z",
+  ecosystem: "vencord",
+  upstream: "1.15.11 (16ec4ea)",
+} as const;
 
 function plugin(report: ReturnType<typeof analyze>, name: string) {
   const found = report.plugins.find((entry) => entry.name === name);
@@ -163,5 +167,52 @@ describe("analyze", () => {
     expect(report.run.expectedErrors).toEqual([
       { reason: "NoTrack deliberately aborts Sentry's module evaluation", count: 1 },
     ]);
+  });
+
+  test("matches BetterDiscord entries by their bd.<name> host id", () => {
+    const bdAcceptance: readonly AcceptanceEntry[] = [
+      { group: "A", name: "BlurNSFW", id: "bd.BlurNSFW" },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 1, started: 1, failed: 0 },
+          ids: ["bd.BlurNSFW:started"],
+          failures: [],
+        },
+      },
+      bdAcceptance,
+      { ...OPTIONS, ecosystem: "bd", upstream: "133bc83 (Apache-2.0 port of BdApi)" },
+    );
+    expect(report.meta.ecosystem).toBe("bd");
+    expect(plugin(report, "BlurNSFW").tier1).toBe("pass");
+    expect(plugin(report, "BlurNSFW").tier2).toBe("pass");
+  });
+
+  test("attributes console-style-format messages after stripping %c", () => {
+    const bdAcceptance: readonly AcceptanceEntry[] = [
+      { group: "A", name: "BlurNSFW", id: "bd.BlurNSFW" },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 1, started: 1, failed: 0 },
+          ids: ["bd.BlurNSFW:started"],
+          failures: [],
+        },
+        warnings: ["%c[BlurNSFW]%c something cosmetic"],
+        rendererErrors: ["%c[BlurNSFW]%c observer() threw in BlurNSFW v1.0.5"],
+      },
+      bdAcceptance,
+      { ...OPTIONS, ecosystem: "bd" },
+    );
+    const blur = plugin(report, "BlurNSFW");
+    expect(blur.warnings).toHaveLength(1);
+    expect(blur.tier2).toBe("fail");
+    expect(blur.reason).toContain("observer() threw");
+    expect(report.run.unattributedWarnings).toEqual([]);
+    expect(report.run.unattributedRendererErrors).toEqual([]);
   });
 });

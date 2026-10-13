@@ -27,6 +27,7 @@ function statusCell(status: CompatReport["plugins"][number]["status"]): string {
 export function renderCompatMarkdown(report: CompatReport): string {
   const lines: string[] = [];
   const { meta, summary, run } = report;
+  const label = meta.ecosystem === "bd" ? "BetterDiscord" : "Vencord";
 
   lines.push("# Compatibility scoreboard");
   lines.push("");
@@ -36,12 +37,12 @@ export function renderCompatMarkdown(report: CompatReport): string {
   );
   lines.push("");
   lines.push(
-    `Generated ${report.generatedAt} · Vencord source ${meta.upstream} · ` +
+    `Generated ${report.generatedAt} · ${label} source ${meta.upstream} · ` +
       `session: ${meta.session} · soak: ${String(Math.round(meta.soakMs / 1000))}s ` +
       `(${meta.tier2Run ? "Tier 2 measured" : "below the Tier 2 soak minimum"})`,
   );
   lines.push("");
-  lines.push("## Vencord / Equicord acceptance set");
+  lines.push(`## ${label} acceptance set`);
   lines.push("");
   lines.push(
     `${String(summary.total)} plugins · **${String(summary.pass)} pass** · ` +

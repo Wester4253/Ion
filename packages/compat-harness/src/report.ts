@@ -21,14 +21,26 @@
  * silently dropped or guessed at.
  */
 
-/** One entry of compat-vencord's acceptance.json. */
+/** One entry of an ecosystem's acceptance.json. */
 export interface AcceptanceEntry {
   readonly group: "A" | "B" | "C" | "D";
-  readonly folder: string;
+  /** Vencord: the source folder under `vendor/vencord/src/plugins`. */
+  readonly folder?: string;
   readonly name: string;
+  /**
+   * Host id when it differs from the plugin name. BetterDiscord plugins
+   * register as `bd.<name>`, so their host state carries that id.
+   */
+  readonly id?: string;
   readonly note?: string;
   readonly tier3?: string;
+  /** BetterDiscord: raw URL the harness downloads and stages (sha256-pinned). */
+  readonly url?: string;
+  readonly sha256?: string;
 }
+
+/** Which compatibility surface a report covers. */
+export type Ecosystem = "vencord" | "bd";
 
 export interface PatchNotice {
   readonly level: "warn" | "error";
@@ -96,6 +108,7 @@ export interface CompatPluginReport {
 export interface CompatReport {
   readonly generatedAt: string;
   readonly meta: {
+    readonly ecosystem: Ecosystem;
     readonly upstream: string;
     readonly session: string;
     readonly soakMs: number;
@@ -129,6 +142,7 @@ export interface CompatReport {
 
 export interface AnalyzeOptions {
   readonly generatedAt: string;
+  readonly ecosystem: Ecosystem;
   readonly upstream: string;
 }
 
@@ -144,10 +158,14 @@ function oneLine(message: string): string {
 
 /** Patterns that identify a message as belonging to `name`. */
 function isAttributedTo(message: string, name: string): boolean {
+  // BdApi's logger prints `%c[Name]%c` with console style arguments; if the
+  // format specifiers survive into the captured text, drop them before
+  // matching (a no-op for already-formatted messages).
+  const text = message.replaceAll("%c", "");
   return (
-    message.startsWith(`[${name}]`) ||
-    message.startsWith(`${name}:`) ||
-    new RegExp(`\\bplugin ${name}\\b`).test(message)
+    text.startsWith(`[${name}]`) ||
+    text.startsWith(`${name}:`) ||
+    new RegExp(`\\bplugin ${name}\\b`).test(text)
   );
 }
 
@@ -208,10 +226,13 @@ export function analyze(
     const [pluginWarnings, leftover] = partitionAttributed(unattributedWarnings, entry.name);
     unattributedWarnings = leftover;
 
-    const registered = states.has(entry.name);
-    const state = states.get(entry.name) ?? null;
-    const startError = startErrors.get(entry.name) ?? null;
-    const stats = patchStats[entry.name] ?? EMPTY_PATCHES;
+    // The host keys plugin state by its id; for BetterDiscord plugins that
+    // is `bd.<name>` (recorded as `id` in the acceptance entry).
+    const hostId = entry.id ?? entry.name;
+    const registered = states.has(hostId);
+    const state = states.get(hostId) ?? null;
+    const startError = startErrors.get(hostId) ?? null;
+    const stats = patchStats[hostId] ?? EMPTY_PATCHES;
     const errorNotices = stats.notices
       .filter((notice) => notice.level === "error")
       .map((notice) => oneLine(notice.message));
@@ -315,6 +336,7 @@ export function analyze(
   return {
     generatedAt: options.generatedAt,
     meta: {
+      ecosystem: options.ecosystem,
       upstream: options.upstream,
       session: smoke.session ?? "unknown",
       soakMs,
