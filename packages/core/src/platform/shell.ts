@@ -187,6 +187,51 @@ export interface IonUiApi {
   readonly ready: boolean;
 }
 
+/** A theme as adapters hand it to the theme store. */
+export interface IonTheme {
+  /** Stable unique id; no whitespace (also the settings namespace). */
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly authors?: readonly string[] | undefined;
+  readonly version?: string | undefined;
+  /** The file this theme was read from, relative to its directory. */
+  readonly filename: string;
+  readonly css: string;
+}
+
+/** A theme as shown in the UI: identity plus live enablement. */
+export interface IonThemeInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly authors: readonly string[];
+  readonly version?: string | undefined;
+  readonly filename: string;
+  readonly enabled: boolean;
+}
+
+/**
+ * Registration and inspection surface, exposed as `window.__ION__.themes`.
+ * One store owns every theme regardless of which adapter found it.
+ */
+export interface IonThemesApi {
+  /** Adds a theme; throws on an invalid or duplicate id/name. */
+  register(theme: IonTheme): void;
+  /**
+   * Removes a theme (its persisted enablement is kept, so re-registering
+   * the same id restores the previous state). False when unknown.
+   */
+  unregister(idOrNameOrFilename: string): boolean;
+  get(idOrNameOrFilename: string): IonTheme | undefined;
+  list(): readonly IonThemeInfo[];
+  isEnabled(idOrNameOrFilename: string): boolean;
+  /** Toggle at runtime: injects or removes the theme's style. False when unknown. */
+  setEnabled(idOrNameOrFilename: string, enabled: boolean): boolean;
+  /** Fired whenever a theme is registered, removed, or toggled. */
+  subscribe(listener: () => void): () => void;
+}
+
 /**
  * The module-discovery surface, exposed as `window.__ION__.discovery`.
  *
@@ -249,6 +294,8 @@ export interface IonGlobal {
   readonly startedAt: number;
   webpack?: IonWebpackStatus;
   plugins?: IonPluginsApi;
+  /** The theme store adapters register their themes with. */
+  themes?: IonThemesApi;
   /** Per-plugin patch telemetry (applied/active/notices) for the harness. */
   patches?: PatchStatsApi;
   /** Module discovery for adapters, which must not re-bundle the core. */

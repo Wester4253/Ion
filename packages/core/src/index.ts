@@ -16,6 +16,7 @@ import { proxyLazy } from "./lazy";
 import { createPluginHost } from "./plugins";
 import type { IonDiscoveryApi, IonGlobal, IonWebpackStatus, ShellFileApi } from "./platform/shell";
 import { createSettingsStore } from "./settings";
+import { createThemeStore } from "./themes";
 import {
   find,
   findAll,
@@ -48,6 +49,9 @@ export type {
   IonPluginState,
   IonPluginStatus,
   IonPluginsApi,
+  IonTheme,
+  IonThemeInfo,
+  IonThemesApi,
   IonUiApi,
   IonWebpackStatus,
   ShellFileApi,
@@ -61,6 +65,7 @@ export type { CacheEntry, ModuleFactory, WebpackRequire } from "./webpack/types"
 export { createPluginHost, type PluginHost } from "./plugins";
 export type { Patch, PatchNotice, PatchStatsApi, PluginPatchStats } from "./patches";
 export { createSettingsStore, type PluginSettings, type SettingsStore } from "./settings";
+export { createThemeStore, type ThemeStore, type ThemeStoreOptions } from "./themes";
 
 export {
   find,
@@ -170,6 +175,9 @@ const host = createPluginHost({
 state.plugins = host;
 state.patches = { stats: () => getPatchRegistry().stats() };
 
+const themes = createThemeStore({ settings });
+state.themes = themes;
+
 initWebpack();
 mountDebugPanel();
 startHealthPoll();
@@ -185,6 +193,9 @@ function bootPlugins(): void {
   registerBundledPlugins(host);
   void (async () => {
     await settings.load();
+    // Theme enablement lives in the same settings document, so the store
+    // can only apply it now; adapters that registered earlier are re-read.
+    themes.boot();
     await host.boot();
     updatePluginStatus(host.status());
     host.subscribe(() => {
