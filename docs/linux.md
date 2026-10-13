@@ -108,3 +108,67 @@ Options if you need others to hear your system audio:
    not parity.
 
 Voice chat, camera video, and normal streaming without audio all work normally.
+
+## Installing
+
+| Method                  | Command                                                    | Notes                                                                                                         |
+| ----------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **AUR (source)**        | `makepkg -si` in the package directory, or your AUR helper | Builds from git and installs the Arch layout. This is the package for Arch, CachyOS, Manjaro and EndeavourOS. |
+| **Pacman (built here)** | `pacman -U packaging/ion-*.pkg.tar.zst`                    | Produced locally by `pnpm package:arch`; no build on your machine.                                            |
+| **AppImage**            | `chmod +x Ion-*.AppImage && ./Ion-*.AppImage`              | Runs from anywhere; no integration with your theme or launcher.                                               |
+| **Debian/Ubuntu**       | `sudo apt install ./Ion-*.deb`                             | Ships for completeness; the Debian layout is not the Arch one.                                                |
+
+The AUR PKGBUILD lives in [`packaging/PKGBUILD`](../packaging/PKGBUILD) with its
+install hooks, desktop entry and AppStream metadata, so an AUR submission is
+that directory as-is. It depends on `pnpm` and `nodejs` from the repos, and sets
+`options=(!strip)`: Electron's shipped binaries carry symbols they resolve at
+runtime, so a stripped package fails to start.
+
+To build everything locally:
+
+```bash
+pnpm build                     # every package's bundle
+node scripts/collect-bundles.mjs   # → packages/shell-desktop/bundles/
+pnpm package:arch              # → packaging/ion-<version>-x86_64.pkg.tar.zst
+```
+
+First run asks for login and stores its profile under `~/.config/Ion`, which
+survives upgrades and removals.
+
+### Screen casting, tray and notifications
+
+PipeWire and the xdg-desktop-portal implementation your desktop ships are the
+runtime requirements for screenshare; they are `optdepends` of the package, so
+`pacman -Qi ion` tells you when one is missing. The tray uses the standard
+status-notifier protocol, which GNOME needs the AppIndicator extension for.
+
+## Windows
+
+Windows is supported but **not verified here**: this project is developed and
+tested on Linux, so nothing below has been run. The packaging configuration is
+in place (`pnpm package:win` builds an NSIS installer and a portable
+executable), and the checklist is for whoever first installs it on Windows.
+
+- [ ] Install the NSIS installer; confirm `Ion.exe` appears in the Start menu
+      with the right icon and that the app id `network.ion.client` groups the
+      taskbar entry (set before any window is created).
+- [ ] Sign in, and confirm the plugin host starts and the settings tab is
+      reachable — the same three smoke probes Linux runs (`coreInjected`,
+      `discoveryReady`, `debugPanelMounted`) should all be true, which the
+      debug popover reports.
+- [ ] Screenshare **with system audio**: this is the one place Electron supports
+      the loopback stream, so it should work here even though it cannot on Linux.
+      Share a screen with "Share audio" on and confirm the other side hears it.
+- [ ] Screenshare without audio, and voice chat.
+- [ ] Close-to-tray: closing the window must leave the app running, with the
+      tray icon able to focus and quit it.
+- [ ] Auto-update: the update check is built but **not wired to an endpoint**
+      (see QUESTIONS.md Q7). Expect it to do nothing; confirm it also does not
+      error the app.
+- [ ] Uninstall through Windows' app list, and confirm the profile under
+      `%APPDATA%/Ion` is left alone.
+- [ ] Portable executable: run it from a USB path, confirm it writes its profile
+      to `%APPDATA%` and not next to the executable.
+
+Anything that fails on Windows gets recorded as a failure on the scoreboard,
+not worked around.
