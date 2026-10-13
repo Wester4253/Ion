@@ -15,6 +15,7 @@
  */
 
 import { getReact, getReactDOM, type BdReact, type BdReactDom } from "../modules/discord-modules";
+import { PluginsApi, ThemesApi } from "./addonapi";
 import { ContextMenu } from "./contextmenu";
 import { Data, BoundData } from "./data";
 import { DOM, BoundDOM } from "./dom";
@@ -40,6 +41,8 @@ const netInstance = new Net();
 const reactUtilsInstance = new ReactUtils();
 const contextMenuInstance = new ContextMenu();
 const hooksInstance = new Hooks();
+const pluginsApi = new PluginsApi();
+const themesApi = new ThemesApi();
 const instances = new Map<string, BdApi>();
 
 export class BdApi {
@@ -80,6 +83,12 @@ export class BdApi {
 
   /** React hooks with plugin scoping. */
   static readonly Hooks: Hooks = hooksInstance;
+
+  /** BetterDiscord's plugin manager (folder/enable/disable/...). */
+  static readonly Plugins: PluginsApi = pluginsApi;
+
+  /** BetterDiscord's theme manager (folder/enable/disable/...). */
+  static readonly Themes: ThemesApi = themesApi;
 
   /** Discord's React, resolved on first access. */
   static get React(): BdReact | undefined {
@@ -196,6 +205,16 @@ export class BdApi {
    */
   get Hooks(): BoundHooks {
     return this.#scopedHooks ?? (hooksInstance as unknown as BoundHooks);
+  }
+
+  /** BetterDiscord's plugin manager — shared, never name-bound. */
+  get Plugins(): PluginsApi {
+    return pluginsApi;
+  }
+
+  /** BetterDiscord's theme manager — shared, never name-bound. */
+  get Themes(): ThemesApi {
+    return themesApi;
   }
 
   /** Discord's React, resolved on first access. */

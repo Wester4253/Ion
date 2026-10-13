@@ -13,15 +13,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { IonPlugin, IonPluginContext, IonPluginInfo, IonPluginsApi } from "@ion/core";
-
+import {
+  CLASS_BODY,
+  classBody,
+  ctx,
+  installHost,
+  installShell,
+  pluginSource,
+  resetCounters,
+  type Counters,
+} from "../testing/fixtures";
 import { BdPluginManager, type MutationBatch, type ObserverHandle } from "./pluginmanager";
-
-interface Counters {
-  events: string[];
-  started: number;
-  stopped: number;
-}
 
 interface FakeObserverState {
   readonly callback: (mutations: MutationBatch) => void;
@@ -30,89 +32,6 @@ interface FakeObserverState {
 }
 
 let counters: Counters;
-const testGlobal = globalThis as { bdCounters?: Counters };
-
-/** Builds a realistic BD plugin file: meta header plus a body. */
-function pluginSource(name: string, body: string, extraTags = ""): string {
-  return `/**
- * @name ${name}
- * @version 1.0.0
- * @description Test fixture
- * @author Tester${extraTags}
- */
-${body}
-`;
-}
-
-const CLASS_BODY = `module.exports = class {
-  start() { globalThis.bdCounters.started++; }
-  stop() { globalThis.bdCounters.stopped++; }
-};`;
-
-/** A class-shaped plugin whose single method is provided by the test. */
-function classBody(method: string): string {
-  return `module.exports = class {
-  constructor(meta) { this.meta = meta; }
-  start() {}
-  stop() {}
-  ${method}
-};`;
-}
-
-/** Stands in for `window.ionShell`: reads from an in-memory file map. */
-function installShell(files: Record<string, string> | undefined): void {
-  const shell = {
-    files: {
-      readdir: (): Promise<string[]> =>
-        files === undefined
-          ? Promise.reject(new Error("ENOENT: bd/plugins"))
-          : Promise.resolve(Object.keys(files)),
-      readFile: (path: string): Promise<string> => {
-        const content = files?.[path.replace(/^bd\/plugins\//, "")];
-        return content === undefined
-          ? Promise.reject(new Error(`ENOENT: ${path}`))
-          : Promise.resolve(content);
-      },
-    },
-  };
-  Object.defineProperty(window, "ionShell", { configurable: true, value: shell });
-}
-
-/**
- * A minimal host with upstream's uniqueness rules: duplicate ids and
- * display names throw, exactly like `createPluginHost`. Returns the
- * registered plugins so tests can drive the lifecycle directly.
- */
-function installHost(...preRegistered: IonPlugin[]): IonPlugin[] {
-  const registered: IonPlugin[] = [...preRegistered];
-  const toInfo = (plugin: IonPlugin): IonPluginInfo => ({
-    id: plugin.id,
-    name: plugin.name,
-    description: plugin.description,
-    authors: plugin.authors?.map((author) => author.name) ?? [],
-    version: plugin.version,
-    enabled: true,
-    state: "started",
-    error: undefined,
-  });
-  const api: IonPluginsApi = {
-    register(plugin) {
-      if (registered.some((entry) => entry.id === plugin.id)) {
-        throw new Error(`plugin id already registered: ${plugin.id}`);
-      }
-      if (registered.some((entry) => entry.name === plugin.name)) {
-        throw new Error(`plugin name already registered: ${plugin.name}`);
-      }
-      registered.push(plugin);
-    },
-    list: () => registered.map(toInfo),
-    setEnabled: () => Promise.resolve(),
-    status: () => ({ registered: registered.length, started: registered.length, failed: 0 }),
-    subscribe: () => () => undefined,
-  };
-  Object.defineProperty(window, "__ION__", { configurable: true, value: { plugins: api } });
-  return registered;
-}
 
 function observerFactory(): {
   factory: (callback: (mutations: MutationBatch) => void) => ObserverHandle;
@@ -134,12 +53,8 @@ function observerFactory(): {
   return { factory, observers };
 }
 
-/** The host passes a context to start/stop; the loader ignores it. */
-const ctx = {} as IonPluginContext;
-
 beforeEach(() => {
-  counters = { events: [], started: 0, stopped: 0 };
-  testGlobal.bdCounters = counters;
+  counters = resetCounters();
   vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -428,5 +343,28 @@ describe("BdPluginManager", () => {
       expect.stringContaining("cannot be shown"),
     );
     expect(manager.settingsPanel("NoSuchPlugin")).toBeUndefined();
+  });
+
+  it("fails fast when the core bundle is missing", async () => {
+    delete window.__ION__;
+
+    await expect(new BdPluginManager().initialize()).rejects.toThrow(
+      "window.__ION__.plugins is missing",
+    );
+  });
+
+  it("treats a missing shell bridge as nothing to load", async () => {
+    installHost();
+    Object.defineProperty(window, "ionShell", { configurable: true, value: undefined });
+
+    const records = await new BdPluginManager().initialize();
+
+    expect(records).toEqual([]);
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      "",
+      "no shell bridge: the bd/plugins directory was not read",
+    );
   });
 });

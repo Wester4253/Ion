@@ -74,11 +74,16 @@ export interface BdPluginManagerDeps {
  */
 export const adapterLogger = boundLoggerFor("compat-bd");
 
-function errorMessage(error: unknown): string {
+/** Formats any thrown value for the one-line warnings this adapter logs. */
+export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function hostIdFor(name: string): string {
+/**
+ * The identity an addon occupies: `bd.<name>` with whitespace replaced,
+ * shared by plugins (the host's namespace) and themes (the store's).
+ */
+export function bdAddonIdFor(name: string): string {
   return `bd.${name.replace(/\s+/g, "_")}`;
 }
 
@@ -238,7 +243,7 @@ export class BdPluginManager {
       return undefined;
     }
 
-    return { meta, instance, hostId: hostIdFor(meta.name), hasObserver: false };
+    return { meta, instance, hostId: bdAddonIdFor(meta.name), hasObserver: false };
   }
 
   /** Registers with the host; false (plus a one-line reason) on a clash. */

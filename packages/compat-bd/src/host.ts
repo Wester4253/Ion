@@ -9,7 +9,7 @@
  * import (the `@ion/core` dependency is types-only).
  */
 
-import type { IonDiscoveryApi } from "@ion/core";
+import type { IonDiscoveryApi, IonPluginsApi, IonThemesApi } from "@ion/core";
 
 function missing(detail: string): Error {
   return new Error(`[ion] compat-bd requires the Ion core bundle (${detail} is missing)`);
@@ -19,5 +19,19 @@ function missing(detail: string): Error {
 export function discovery(): IonDiscoveryApi {
   const api = window.__ION__?.discovery;
   if (!api) throw missing("window.__ION__.discovery");
+  return api;
+}
+
+/** Plugin host; throws when the core bundle did not run first. */
+export function pluginsHost(): IonPluginsApi {
+  const api = window.__ION__?.plugins;
+  if (!api) throw missing("window.__ION__.plugins");
+  return api;
+}
+
+/** Theme store; throws when the core bundle did not run first. */
+export function themesStore(): IonThemesApi {
+  const api = window.__ION__?.themes;
+  if (!api) throw missing("window.__ION__.themes");
   return api;
 }

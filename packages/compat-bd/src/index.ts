@@ -13,6 +13,7 @@
 
 import { BdApi } from "./api";
 import { adapterLogger, pluginManager } from "./manager/pluginmanager";
+import { loadBdThemes } from "./manager/themes";
 
 declare global {
   interface Window {
@@ -34,4 +35,10 @@ Object.defineProperty(window, "BdApi", {
 // than per plugin; individual files fail in isolation inside.
 void pluginManager.initialize().catch((error: unknown) => {
   adapterLogger.error("BetterDiscord plugin loading aborted", error);
+});
+
+// Themes are independent of plugins: same story — one rejection means the
+// core bundle or the shell bridge is missing, reported once, not per file.
+void loadBdThemes().catch((error: unknown) => {
+  adapterLogger.error("BetterDiscord theme loading aborted", error);
 });
