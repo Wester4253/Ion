@@ -558,3 +558,59 @@ describe("the documented theme variables", () => {
     expect(document.head.querySelectorAll("style[data-ion-theme-base]")).toHaveLength(1);
   });
 });
+
+/**
+ * The core bundle is injected before Discord's first script, so at the moment
+ * the adapters build their theme host the parser has produced neither a
+ * `<head>` nor an `<html>`. This is the regression: the engine read
+ * `document.querySelector("head") ?? document.documentElement`, which is null
+ * there, and the first style install threw "Cannot read properties of null
+ * (reading 'querySelector')" — killing the whole injection, which left the
+ * client with no core, no discovery and no plugins.
+ */
+describe("a document with no element yet (document-start)", () => {
+  let originalHtml: HTMLElement;
+  let originalHead: HTMLElement | null;
+  let restore: () => void;
+
+  beforeEach(() => {
+    originalHtml = document.documentElement;
+    originalHead = document.head;
+    Object.defineProperty(document, "head", { value: null, configurable: true });
+    Object.defineProperty(document, "documentElement", { value: null, configurable: true });
+    restore = () => {
+      Object.defineProperty(document, "head", { value: originalHead, configurable: true });
+      Object.defineProperty(document, "documentElement", {
+        value: originalHtml,
+        configurable: true,
+      });
+    };
+  });
+
+  afterEach(() => {
+    restore();
+  });
+
+  it("builds a store without throwing, and installs once the document grows", async () => {
+    const { store } = await fixture();
+
+    // Registering and booting while the document is empty must not touch the
+    // DOM at all: nothing is lost, only deferred.
+    store.register(theme("early"));
+    store.boot();
+    expect(document.querySelectorAll("style")).toHaveLength(0);
+
+    // The document finally exists — and it is the document's own root, not a
+    // detached one, or the appended styles would be invisible to it. Assigning
+    // directly is refused (`documentElement` is a read-only accessor), and
+    // defining it is what the parser does anyway.
+    Object.defineProperty(document, "documentElement", {
+      value: originalHtml,
+      configurable: true,
+    });
+    document.dispatchEvent(new Event("readystatechange"));
+
+    expect(document.querySelectorAll("style[data-ion-theme-base]")).toHaveLength(1);
+    expect(document.querySelectorAll('style[data-ion-theme="early"]')).toHaveLength(1);
+  });
+});

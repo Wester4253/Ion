@@ -33,11 +33,50 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Where theme styles live: the document's `<head>`, or `<html>` if earlier. */
-function styleRoot(): Element {
-  // Typed as never absent, but at document-start the parser may not have
-  // produced a <head> yet; a query gives the honest runtime answer.
-  return document.querySelector("head") ?? document.documentElement;
+/**
+ * Where theme styles live: the document's `<head>`, or `<html>` if earlier.
+ *
+ * Null until the document has any element at all — which is the state the core
+ * bundle is injected in. Injection happens at document-start, before Discord's
+ * first script, so that module discovery can hook the chunk loader in time; at
+ * that instant the parser has produced neither a `<head>` nor an `<html>`.
+ * The adapters ask for the theme host from that same injection, so null is the
+ * normal first call, not an error: everything goes through
+ * {@link whenStyleRoot}, which waits for the document to matter.
+ */
+function styleRoot(): Element | null {
+  // The DOM lib types `documentElement` as never absent, but at document-start
+  // it is null: the core bundle is injected before any HTML is parsed. Reading
+  // it through a Partial states that, and the null is what the rest of the
+  // engine waits on — see whenStyleRoot. It is also the right existence test,
+  // because `<head>` can be queried before it has a parent to belong to.
+  const element: Element | null = (document as Partial<Document>).documentElement ?? null;
+  if (element === null) return null;
+  return document.querySelector("head") ?? element;
+}
+
+/**
+ * Runs `install` once there is a style root, waiting for one if there is not.
+ *
+ * Waiting is the point, not a fallback: the base CSS and any theme registered
+ * during injection still have to reach the DOM, and reaching it a moment later
+ * is equivalent — nothing has rendered yet. The listener is removed on the
+ * first successful install, so a theme registered afterwards cannot run it
+ * twice.
+ */
+function whenStyleRoot(install: (root: Element) => void): void {
+  const existing = styleRoot();
+  if (existing !== null) {
+    install(existing);
+    return;
+  }
+  const attach = (): void => {
+    const root = styleRoot();
+    if (root === null) return;
+    document.removeEventListener("readystatechange", attach);
+    install(root);
+  };
+  document.addEventListener("readystatechange", attach);
 }
 
 /**
@@ -77,14 +116,16 @@ export const THEME_BASE_CSS = `
 
 /** (Re)installs the base element. Idempotent, and always before themes. */
 function installBaseStyle(): void {
-  styleRoot().querySelector(`style[${BASE_STYLE_ATTRIBUTE}]`)?.remove();
-  const style = document.createElement("style");
-  style.setAttribute(BASE_STYLE_ATTRIBUTE, "");
-  style.textContent = THEME_BASE_CSS;
-  // Appended, never prepended: theme styles land after it in document order,
-  // so a theme that sets its own `--ion-theme-*` value overrides ours while
-  // still inheriting every token it does not touch.
-  styleRoot().appendChild(style);
+  whenStyleRoot((root) => {
+    root.querySelector(`style[${BASE_STYLE_ATTRIBUTE}]`)?.remove();
+    const style = document.createElement("style");
+    style.setAttribute(BASE_STYLE_ATTRIBUTE, "");
+    style.textContent = THEME_BASE_CSS;
+    // Appended, never prepended: theme styles land after it in document order,
+    // so a theme that sets its own `--ion-theme-*` value overrides ours while
+    // still inheriting every token it does not touch.
+    root.appendChild(style);
+  });
 }
 
 export interface ThemeStoreOptions {
@@ -135,23 +176,27 @@ export function createThemeStore(options: ThemeStoreOptions): ThemeStore {
     for (const listener of listeners) listener();
   };
 
-  const findStyle = (id: string): Element | undefined => {
-    for (const element of styleRoot().querySelectorAll("style")) {
-      if (element.getAttribute(STYLE_ATTRIBUTE) === id) return element;
-    }
-    return undefined;
-  };
-
+  // Every style path goes through whenStyleRoot, so a theme registered while the
+  // document is still empty — which is when the adapters register theirs —
+  // arrives once there is a root, and no caller has to know the difference.
   const removeStyle = (id: string): void => {
-    findStyle(id)?.remove();
+    whenStyleRoot((root) => {
+      for (const element of Array.from(root.querySelectorAll("style"))) {
+        if (element.getAttribute(STYLE_ATTRIBUTE) === id) element.remove();
+      }
+    });
   };
 
   const injectStyle = (theme: IonTheme): void => {
-    removeStyle(theme.id);
     const style = document.createElement("style");
     style.setAttribute(STYLE_ATTRIBUTE, theme.id);
     style.textContent = theme.css;
-    styleRoot().appendChild(style);
+    whenStyleRoot((root) => {
+      for (const element of Array.from(root.querySelectorAll("style"))) {
+        if (element.getAttribute(STYLE_ATTRIBUTE) === theme.id) element.remove();
+      }
+      root.appendChild(style);
+    });
   };
 
   const applyEnabled = (theme: IonTheme): void => {
