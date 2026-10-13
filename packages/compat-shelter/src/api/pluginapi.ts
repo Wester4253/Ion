@@ -5,10 +5,11 @@
  * showSettings, scoped }`, built before the plugin's source is evaluated so
  * a plugin can read and seed its store at module scope. Same order here.
  *
- * `store` is a Solid store over whatever `flushStore` last persisted, so a
- * plugin's settings components stay reactive when the plugin writes
- * `store.someFlag = value` directly — which is how the plugins in the wild
- * use it. Persistence goes through the captured DOM storage the core bundle
+ * `store` is a mutable, Solid-reactive store (see `api/store.ts`) over
+ * whatever `flushStore` last persisted, so a plugin may write
+ * `store.someFlag = value` at any point — seeding itself at module scope,
+ * as plugins in the wild do — and its settings components stay reactive.
+ * Persistence goes through the captured DOM storage the core bundle
  * owns rather than `window.localStorage`, because Discord's client deletes
  * that property from the window after load.
  *
@@ -22,8 +23,8 @@ import type { ScopedApi, ScopedApiDeps } from "./scoped";
 import type { UiSurface } from "./ui";
 
 import { runInPluginScope, shelterLog } from "../logger";
-import { createStore, unwrap } from "solid-js/store";
 import { createScopedApi } from "./scoped";
+import { createPluginStore } from "./store";
 import { openSettingsModal } from "./settingsmodal";
 
 /** Profile-storage key for one plugin's persisted store. */
@@ -92,13 +93,13 @@ export function createPluginApi(options: PluginApiOptions): PluginApi {
   };
 
   const initial = loadStore(options.storage, options.id, warn);
-  const [store] = createStore<Record<string, unknown>>(initial);
+  const store = createPluginStore(initial);
   const scoped = createScopedApi(options.deps, options.scope);
 
   return {
-    store: store,
+    store: store.store,
     flushStore(): void {
-      options.storage.write(storageKey(options.id), JSON.stringify(unwrap(store)));
+      options.storage.write(storageKey(options.id), JSON.stringify(store.snapshot()));
     },
     id: options.id,
     manifest: options.manifest,

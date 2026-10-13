@@ -84,6 +84,17 @@ IndexedDB, no in-client marketplace) or from making a failure legible; none is a
 
 **What plugins see**
 
+- **`plugin.store` is a mutable proxy over a Solid store, not a valtio proxy.**
+  Upstream's store is valtio-backed, which mutates in place and drives Solid
+  through signals valtio's subscription updates. Solid's own `createStore`
+  _proxy_ is read-only in 1.6.16 — its `set` trap only warns `Cannot mutate a
+Store directly` — so handing that to plugins dropped every write, and a
+  plugin that seeds its own store and reads it back threw
+  `store.watchedGuilds is not iterable`. Ion wraps the store instead
+  (`src/api/store.ts`): writes are routed by key path through the setter that
+  came with it, keeping Solid's reactivity, array handling and `unwrap` for
+  persistence, so the contract plugins rely on (mutate, read, observe,
+  persist) is met without a valtio dependency.
 - **`onLoad` and `onUnload` are awaited, under a 30-second deadline.** Upstream fires
   `onLoad` and never waits, so a plugin whose hook never settles reads as `starting`
   forever. A hook that never finishes must not be able to score as a pass: each hook runs
