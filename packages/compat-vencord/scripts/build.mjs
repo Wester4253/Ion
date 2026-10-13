@@ -464,7 +464,13 @@ const options = {
   // relative sourceMappingURL would resolve against the page, not the file.
   sourcemap: "inline",
   banner: { js: banner },
-  footer: { js: "//# sourceURL=ion://compat-vencord/index.js" },
+  // No `sourceURL` footer: the shell evaluates this bundle concatenated with
+  // core, ui, and the other adapters, and V8 takes the *last* `sourceURL` in
+  // the injected source as the name of every frame. Naming this file here
+  // would attribute every adapter's stack to the Vencord bundle — which is
+  // what the harness reports did until the shell started appending
+  // `ion://ion/injection.js` last (see `loadCoreBundle`). The per-plugin
+  // Ion Index artifacts below keep theirs: they are evaluated on their own.
   plugins: [aliasPlugin, virtualPlugin, cssPlugin],
 };
 

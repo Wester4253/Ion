@@ -15,7 +15,19 @@
 
 import { resolve } from "node:path";
 
-/** An optional bundle appended after the core bundle. */
+/**
+ * The name every injected script reports in its stack frames.
+ *
+ * The shell evaluates core, ui, and the adapters as *one* script, so V8
+ * applies a single `sourceURL` to every frame it produces — the last one in
+ * the source wins. Each bundle keeps its own name for standalone use, but
+ * the shell appends this one last, so a stack frame from the Shelter adapter
+ * says `ion://ion/injection.js` rather than claiming to be
+ * `ion://compat-vencord/index.js` (which is what the harness used to report
+ * for shelter failures: the Vencord bundle's footer is the last `sourceURL`
+ * in the concatenated source, so it named every frame).
+ */
+export const INJECTION_SOURCE_URL = "ion://ion/injection.js";
 export interface OptionalBundle {
   readonly name: string;
   readonly candidates: readonly string[];
@@ -159,7 +171,7 @@ export function loadCoreBundle(
   const loadedNames = new Set(optional.filter((entry) => entry.loaded).map((entry) => entry.name));
   return {
     ok: true,
-    source,
+    source: `${source}\n//# sourceURL=${INJECTION_SOURCE_URL}\n`,
     file: core.file,
     optional,
     ui: loadedNames.has("ui"),

@@ -5,9 +5,15 @@ import {
   compatShelterBundleCandidates,
   compatVencordBundleCandidates,
   coreBundleCandidates,
+  INJECTION_SOURCE_URL,
   loadCoreBundle,
   uiBundleCandidates,
 } from "./bundle";
+
+/** What `loadCoreBundle` returns for the given concatenation of bundles. */
+function injected(...bundles: string[]): string {
+  return `${bundles.join("\n;\n")}\n//# sourceURL=${INJECTION_SOURCE_URL}\n`;
+}
 
 describe("coreBundleCandidates", () => {
   test("resolves the sibling workspace bundle", () => {
@@ -85,7 +91,7 @@ describe("loadCoreBundle", () => {
     });
     expect(result).toEqual({
       ok: true,
-      source: "code",
+      source: injected("code"),
       file: "/opt/ion/core.js",
       optional: [
         { name: "ui", candidates: expect.anything() as string[], loaded: false },
@@ -106,7 +112,7 @@ describe("loadCoreBundle", () => {
       throw new Error("missing");
     });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.source).toBe("workspace code");
+    if (result.ok) expect(result.source).toBe(injected("workspace code"));
   });
 
   test("appends the UI bundle after the core bundle", () => {
@@ -119,7 +125,7 @@ describe("loadCoreBundle", () => {
     if (result.ok) {
       expect(result.ui).toBe(true);
       expect(result.compatVencord).toBe(false);
-      expect(result.source).toBe("core code\n;\nui code");
+      expect(result.source).toBe(injected("core code", "ui code"));
       expect(result.file).toBe("/opt/ion/core.js");
     }
   });
@@ -142,7 +148,7 @@ describe("loadCoreBundle", () => {
       expect(result.ui).toBe(true);
       expect(result.compatVencord).toBe(true);
       expect(result.compatBd).toBe(false);
-      expect(result.source).toBe("core code\n;\nui code\n;\nvencord adapter code");
+      expect(result.source).toBe(injected("core code", "ui code", "vencord adapter code"));
     }
   });
 
@@ -167,7 +173,7 @@ describe("loadCoreBundle", () => {
       expect(result.compatVencord).toBe(true);
       expect(result.compatBd).toBe(true);
       expect(result.source).toBe(
-        "core code\n;\nui code\n;\nvencord adapter code\n;\nbd adapter code",
+        injected("core code", "ui code", "vencord adapter code", "bd adapter code"),
       );
     }
   });
@@ -192,7 +198,7 @@ describe("loadCoreBundle", () => {
       expect(result.compatVencord).toBe(false);
       expect(result.compatBd).toBe(false);
       expect(result.compatShelter).toBe(true);
-      expect(result.source).toBe("core code\n;\nshelter adapter code");
+      expect(result.source).toBe(injected("core code", "shelter adapter code"));
     }
   });
 
@@ -204,7 +210,22 @@ describe("loadCoreBundle", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.ui).toBe(false);
-      expect(result.source).toBe("core code");
+      expect(result.source).toBe(injected("core code"));
+    }
+  });
+
+  test("names the whole injection with one trailing sourceURL", () => {
+    // V8 keeps the *last* sourceURL in a script, so the shell's marker has to
+    // come after every bundle — otherwise whichever adapter happens to end
+    // with its own name would claim every frame, which is what the harness
+    // reports did for shelter failures before this.
+    const result = loadCoreBundle("/opt/ion/core.js", undefined, dist, (file) => {
+      if (file === "/opt/ion/core.js") return "code\n//# sourceURL=ion://compat-vencord/index.js";
+      throw new Error("missing");
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.source.endsWith(`//# sourceURL=${INJECTION_SOURCE_URL}\n`)).toBe(true);
     }
   });
 
