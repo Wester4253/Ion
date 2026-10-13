@@ -12,6 +12,7 @@
  */
 
 import { BdApi } from "./api";
+import { adapterLogger, pluginManager } from "./manager/pluginmanager";
 
 declare global {
   interface Window {
@@ -25,4 +26,12 @@ Object.defineProperty(window, "BdApi", {
   writable: true,
   configurable: true,
   enumerable: true,
+});
+
+// User-installed BetterDiscord plugins are evaluated once the host is in
+// place. This rejects only when the host itself is missing (a broken
+// injection order), so the adapter-wide failure is reported once rather
+// than per plugin; individual files fail in isolation inside.
+void pluginManager.initialize().catch((error: unknown) => {
+  adapterLogger.error("BetterDiscord plugin loading aborted", error);
 });
