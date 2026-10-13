@@ -2,20 +2,20 @@
  * `BdApi.Utils` — BetterDiscord's utility surface. A port of
  * src/betterdiscord/api/utils.ts (Apache-2.0, see THIRD_PARTY.md): the same
  * shared implementations upstream re-exports (tree walking, deep extend,
- * debounce, clsx, semver comparison, mapObject, Store, cache), plus the
- * DOM-backed `escapeHTML`.
+ * debounce, clsx, semver comparison, mapObject, Store, cache), the DOM-
+ * backed `escapeHTML`, and the chunk-loading helpers `forceLoad`/
+ * `loadEntry`.
  *
  * Upstream builds these as per-instance fields on a class; they are all
  * stateless, so this port exposes the same surface as one frozen object —
- * identical for callers, without per-instance copies. `forceLoad` and
- * `loadEntry` are deliberately absent here and arrive with the webpack
- * chunk-loading work (see THIRD_PARTY.md).
+ * identical for callers, without per-instance copies.
  */
 
 import { clsx } from "../common/clsx";
 import { comparator } from "../common/semver";
 import { Store } from "../common/store";
 import { cache, debounce, extend, findInTree, getNestedProp } from "../common/utils";
+import { forceLoad, loadEntry } from "../webpack/lazy";
 import { mapObject } from "./webpack/mapObject";
 
 /** Takes a string of HTML and escapes it using the browser's own mechanism. */
@@ -57,4 +57,10 @@ export const Utils = Object.freeze({
 
   /** Memoizes a factory's result; `.proxy` defers it to first property access. */
   cache,
+
+  /** Force-loads the chunks a module id references, then evaluates them. */
+  forceLoad,
+
+  /** Loads the lazy entry a function's source points at. */
+  loadEntry,
 });
