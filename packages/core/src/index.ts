@@ -16,6 +16,7 @@ import { proxyLazy } from "./lazy";
 import { createPluginHost } from "./plugins";
 import type { IonDiscoveryApi, IonGlobal, IonWebpackStatus, ShellFileApi } from "./platform/shell";
 import { createSettingsStore } from "./settings";
+import { domStorage } from "./storage";
 import { createThemeStore } from "./themes";
 import {
   find,
@@ -65,6 +66,7 @@ export type { CacheEntry, ModuleFactory, WebpackRequire } from "./webpack/types"
 export { createPluginHost, type PluginHost } from "./plugins";
 export type { Patch, PatchNotice, PatchStatsApi, PluginPatchStats } from "./patches";
 export { createSettingsStore, type PluginSettings, type SettingsStore } from "./settings";
+export { domStorage, type DomStorage, type DomStorageBackend } from "./storage";
 export { createThemeStore, type ThemeStore, type ThemeStoreOptions } from "./themes";
 
 export {
@@ -116,6 +118,7 @@ const UNAVAILABLE_FILES: ShellFileApi = {
 const state: IonGlobal = {
   version: window.ionShell?.appVersion ?? "unknown",
   startedAt: performance.now(),
+  storage: domStorage,
 };
 
 window.__ION__ = state;

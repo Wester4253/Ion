@@ -9,10 +9,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { IonDiscoveryApi, IonGlobal } from "@ion/core";
+import type { DomStorage, IonDiscoveryApi, IonGlobal } from "@ion/core";
 
 import { BoundHooks, Hooks } from "./hooks";
 import { useForceUpdate, useStateFromStores, type StoreLike } from "../ui/hooks";
+
+/** The storage shim installed by the beforeEach below. */
+function shimmedStorage(): DomStorage {
+  const storage = window.__ION__?.storage;
+  if (!storage) throw new Error("storage shim missing");
+  return storage;
+}
 
 let findable: unknown[];
 let dispatchCount: number;
@@ -84,25 +91,25 @@ beforeEach(() => {
     getRequires: () => [],
     waitFor: () => () => undefined,
   } as unknown as IonDiscoveryApi;
-  (window as unknown as { __ION__: IonGlobal }).__ION__ = { discovery } as unknown as IonGlobal;
-
-  // happy-dom has no localStorage; shim it the way data.test.ts does.
+  // happy-dom has no Storage; back core's DOM storage facade with a Map, the
+  // way data.test.ts does. The JsonStore persists through that facade, never
+  // through `window.localStorage`, which Discord deletes from the window after
+  // its own scripts run.
   const backing = new Map<string, string>();
-  Object.defineProperty(window, "localStorage", {
-    configurable: true,
-    value: {
-      getItem: (key: string) => backing.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        backing.set(key, value);
-      },
-      removeItem: (key: string) => {
-        backing.delete(key);
-      },
-      clear: () => {
-        backing.clear();
-      },
+  const storage: DomStorage = {
+    backend: "memory",
+    read: (key) => backing.get(key) ?? null,
+    write: (key, value) => {
+      backing.set(key, value);
     },
-  });
+    remove: (key) => {
+      backing.delete(key);
+    },
+  };
+  (window as unknown as { __ION__: IonGlobal }).__ION__ = {
+    discovery,
+    storage,
+  } as unknown as IonGlobal;
 });
 
 afterEach(() => {
@@ -201,8 +208,8 @@ describe("useForceUpdate", () => {
 describe("useData", () => {
   it("reads the caller plugin's data, static and bound", () => {
     findable.push(fakeReact);
-    window.localStorage.setItem("ION_BD_DATA_Alice", JSON.stringify({ theme: "dark" }));
-    window.localStorage.setItem("ION_BD_DATA_Bob", JSON.stringify({ theme: "light" }));
+    shimmedStorage().write("ION_BD_DATA_Alice", JSON.stringify({ theme: "dark" }));
+    shimmedStorage().write("ION_BD_DATA_Bob", JSON.stringify({ theme: "light" }));
 
     const hooks = new Hooks();
     expect(render(() => hooks.useData("Alice", "theme"))).toBe("dark");

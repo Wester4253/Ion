@@ -1,34 +1,46 @@
 // @vitest-environment happy-dom
 /**
- * Unit tests for the `BdApi.Data` surface over the adapter's localStorage-
- * backed JsonStore: falsey-value round-trips, per-plugin isolation,
- * undefined-as-no-op vs explicit delete, recache success/failure reporting,
- * and the plugin-scoped bound instance.
+ * Unit tests for the `BdApi.Data` surface over the adapter's DOM-storage-backed
+ * JsonStore: falsey-value round-trips, per-plugin isolation, undefined-as-no-op
+ * vs explicit delete, recache success/failure reporting, and the plugin-scoped
+ * bound instance.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
+import type { DomStorage, IonGlobal } from "@ion/core";
 
 import { BoundData, Data } from "./data";
 
+/** The storage shim installed by the beforeEach below. */
+function shimmedStorage(): DomStorage {
+  const storage = window.__ION__?.storage;
+  if (!storage) throw new Error("storage shim missing");
+  return storage;
+}
+
 beforeEach(() => {
+  // The JsonStore persists through core's captured DOM storage rather than
+  // `window.localStorage`, which Discord deletes from the window after load.
   // happy-dom 20 only wires up Storage for a full browser context, which
   // vitest's environment does not create; back the tests with a Map instead.
   // The store only uses getItem/setItem, exactly like a real Storage.
   // The JsonStore singleton also caches per plugin name, so every test uses
   // its own plugin name to stay isolated.
   const backing = new Map<string, string>();
-  Object.defineProperty(window, "localStorage", {
-    configurable: true,
-    value: {
-      getItem: (key: string): string | null => backing.get(key) ?? null,
-      setItem: (key: string, value: string): void => {
-        backing.set(key, value);
-      },
-      clear: (): void => {
-        backing.clear();
-      },
-    } satisfies Partial<Storage>,
-  });
+  const storage: DomStorage = {
+    backend: "memory",
+    read: (key) => backing.get(key) ?? null,
+    write: (key, value) => {
+      backing.set(key, value);
+    },
+    remove: (key) => {
+      backing.delete(key);
+    },
+  };
+  (window as unknown as { __ION__: IonGlobal }).__ION__ = {
+    ...window.__ION__,
+    storage,
+  } as unknown as IonGlobal;
 });
 
 describe("Data", () => {
@@ -63,11 +75,11 @@ describe("Data", () => {
     data.save("RecacheOk", "key", "before");
 
     // Externally replace the stored blob, exactly like another context would.
-    window.localStorage.setItem("ION_BD_DATA_RecacheOk", JSON.stringify({ key: "after" }));
+    shimmedStorage().write("ION_BD_DATA_RecacheOk", JSON.stringify({ key: "after" }));
     await expect(data.recache("RecacheOk")).resolves.toBe(true);
     expect(data.load("RecacheOk", "key")).toBe("after");
 
-    window.localStorage.setItem("ION_BD_DATA_RecacheBad", "{not json");
+    shimmedStorage().write("ION_BD_DATA_RecacheBad", "{not json");
     await expect(data.recache("RecacheBad")).resolves.toBe(false);
     expect(data.load("RecacheBad", "key")).toBeUndefined();
   });

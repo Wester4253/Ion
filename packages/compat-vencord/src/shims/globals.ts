@@ -5,10 +5,10 @@
  * Upstream these are IPC surfaces into the Electron main process. In Ion
  * they resolve against what the shell actually offers:
  *
- * - `settings` persists through `localStorage` in the isolated Ion profile —
- *   synchronous, exactly like the module-eval-time read in the vendored
- *   Settings store requires. It is per-profile and never touches Vesktop's
- *   or Discord's storage.
+ * - `settings` persists through core's captured DOM storage in the isolated
+ *   Ion profile — synchronous, exactly like the module-eval-time read in the
+ *   vendored Settings store requires. It is per-profile and never touches
+ *   Vesktop's or Discord's storage.
  * - `native.openExternal` goes through Ion's allowlisted shell bridge.
  * - Vencord-managed features whose backing service belongs to Ion instead
  *   (themes directory, QuickCss, the Vencord updater, cloud sync) return
@@ -25,20 +25,18 @@ const SETTINGS_KEY = "ion.vencord.settings";
 const QUICK_CSS_KEY = "ion.vencord.quickCss";
 
 function readStorage(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    // Private-mode or disabled storage: behave like a fresh install.
-    return null;
-  }
+  // Core's captured DOM storage, not `window.localStorage`: Discord deletes
+  // that property from the window shortly after its own scripts run, so a
+  // lazy lookup would find `undefined` and settings would never load.
+  return window.__ION__?.storage.read(key) ?? null;
 }
 
 function writeStorage(key: string, value: string): void {
   try {
-    window.localStorage.setItem(key, value);
+    window.__ION__?.storage.write(key, value);
   } catch (error) {
     // eslint-disable-next-line no-console -- surfaced to devtools: settings would silently vanish otherwise
-    console.error("[ion/vencord] could not persist settings to localStorage", error);
+    console.error("[ion/vencord] could not persist settings to DOM storage", error);
   }
 }
 

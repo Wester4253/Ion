@@ -3,15 +3,20 @@
  * (src/betterdiscord/stores/json.ts, Apache-2.0, see THIRD_PARTY.md) with
  * the persistence layer swapped: upstream writes one `.config.json` file per
  * plugin through Node's filesystem, while Ion's plugin environment has no
- * filesystem, so each plugin's data lives in one `localStorage` entry
+ * filesystem, so each plugin's data lives in one DOM storage entry
  * (JSON-encoded, same pretty-printed shape). The API `BdApi.Data` exposes —
  * save/load/delete/recache — behaves the same: falsey values survive a
  * round-trip, saving `undefined` is a no-op (delete instead), and a
  * corrupted blob reads as empty data while `recache` reports the failure.
+ *
+ * The backing area is core's captured reference, never `window.localStorage`:
+ * Discord's client deletes that property from the window after load, so a lazy
+ * lookup would find `undefined` and every `Data.save` would throw.
  */
 
 import { Logger } from "../common/logger";
 import { Store } from "../common/store";
+import { domStorage } from "../host";
 
 const STORAGE_PREFIX = "ION_BD_DATA_";
 
@@ -43,7 +48,7 @@ class JsonStore extends Store {
   /**
    * Drops the in-memory cache and re-reads the backing store. Upstream
    * warns that recache can block on the filesystem; here it only re-parses
-   * one localStorage entry, but the API and failure reporting match.
+   * one storage entry, but the API and failure reporting match.
    *
    * @returns Whether the data reloaded cleanly.
    */
@@ -61,9 +66,9 @@ class JsonStore extends Store {
 
   /** Reads the backing entry; throws on malformed JSON (callers decide). */
   #read(pluginName: string): Record<string, unknown> {
+    const raw = domStorage().read(storageKey(pluginName));
+    if (!raw) return {};
     try {
-      const raw = window.localStorage.getItem(storageKey(pluginName));
-      if (!raw) return {};
       const parsed: unknown = JSON.parse(raw);
       if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
       return parsed as Record<string, unknown>;
@@ -89,7 +94,7 @@ class JsonStore extends Store {
   #save(pluginName: string): void {
     // Upstream writes through `fs` and lets failures propagate; quota and
     // serialization errors surface to the calling plugin the same way.
-    window.localStorage.setItem(
+    domStorage().write(
       storageKey(pluginName),
       JSON.stringify(this.#cache.get(pluginName), null, 4),
     );

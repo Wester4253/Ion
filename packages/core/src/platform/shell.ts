@@ -12,6 +12,7 @@
 import type { Logger } from "../logging";
 import type { Patch, PatchStatsApi } from "../patches";
 import type { PluginSettings } from "../settings";
+import type { DomStorage } from "../storage";
 import type { CodeFilter, ModuleFilter } from "../webpack/filters";
 import type { ModuleFactory, WebpackRequire } from "../webpack/types";
 
@@ -300,6 +301,11 @@ export interface IonGlobal {
   patches?: PatchStatsApi;
   /** Module discovery for adapters, which must not re-bundle the core. */
   discovery?: IonDiscoveryApi;
+  /**
+   * DOM storage, captured while `window.localStorage` still existed. Adapters
+   * persist through this instead of the window property the page deletes.
+   */
+  storage: DomStorage;
   ui?: IonUiApi;
 }
 
