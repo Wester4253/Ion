@@ -40,10 +40,101 @@ describe("evaluatePluginModule", () => {
     expect(instantiatePlugin(exported as BdPluginExport, META)).toBeDefined();
   });
 
+  it("provides EventEmitter through require('events')", () => {
+    const exported = evaluatePluginModule(
+      `const { EventEmitter } = require("events");
+       class Store extends EventEmitter {}
+       const store = new Store();
+       let seen = null;
+       store.on("change", (value) => { seen = value; });
+       store.emit("change", 42);
+       module.exports = { seen, count: store.listenerCount("change"), names: store.eventNames() };`,
+      META.filename,
+      FOLDER,
+    ) as { seen: number; count: number; names: string[] };
+    expect(exported.seen).toBe(42);
+    expect(exported.count).toBe(1);
+    expect(exported.names).toEqual(["change"]);
+  });
+
+  it("emits through the ESM default namespace like a transpiled import", () => {
+    // BlurNSFW reaches the emitter as __toESM(require("events")).default.
+    const exported = evaluatePluginModule(
+      `const import_events = require("events");
+       const bus = new import_events.default.EventEmitter();
+       let seen = 0;
+       bus.on("tick", () => { seen++; });
+       bus.emit("tick");
+       module.exports = seen;`,
+      META.filename,
+      FOLDER,
+    );
+    expect(exported).toBe(1);
+  });
+
+  it("detaches once() listeners after their first emission", () => {
+    const exported = evaluatePluginModule(
+      `const { EventEmitter } = require("events");
+       const bus = new EventEmitter();
+       let count = 0;
+       bus.once("tick", () => { count++; });
+       bus.emit("tick");
+       bus.emit("tick");
+       module.exports = { count, left: bus.listenerCount("tick") };`,
+      META.filename,
+      FOLDER,
+    ) as { count: number; left: number };
+    expect(exported).toEqual({ count: 1, left: 0 });
+  });
+
+  it("returns false when emitting with no listeners, and true when one ran", () => {
+    const exported = evaluatePluginModule(
+      `const { EventEmitter } = require("events");
+       const bus = new EventEmitter();
+       const silent = bus.emit("nobody");
+       let ran = false;
+       bus.on("x", () => { ran = true; });
+       module.exports = { silent, loud: bus.emit("x"), ran };`,
+      META.filename,
+      FOLDER,
+    ) as { silent: boolean; loud: boolean; ran: boolean };
+    expect(exported).toEqual({ silent: false, loud: true, ran: true });
+  });
+
+  it("throws on an unhandled 'error' emission, like Node does", () => {
+    expect(() =>
+      evaluatePluginModule(
+        `const { EventEmitter } = require("events");
+         new EventEmitter().emit("error", new Error("boom"));`,
+        META.filename,
+        FOLDER,
+      ),
+    ).toThrow("Unhandled 'error' event");
+  });
+
+  it("throws by name for the members it does not implement", () => {
+    // The reason must not claim the module is unavailable — `events` did
+    // resolve; this specific member is what is missing.
+    expect(() =>
+      evaluatePluginModule(
+        `const { EventEmitter } = require("events");
+         new EventEmitter().prependListener("x", () => {});`,
+        META.filename,
+        FOLDER,
+      ),
+    ).toThrow("prependListener");
+  });
+
   it("fails loudly when a plugin requires a Node module", () => {
     expect(() =>
       evaluatePluginModule('module.exports = require("electron");', META.filename, FOLDER),
     ).toThrow('require("electron") is not available');
+    expect(() =>
+      evaluatePluginModule('module.exports = require("fs");', META.filename, FOLDER),
+    ).toThrow('require("fs") is not available');
+    expect(() =>
+      evaluatePluginModule('module.exports = require("path");', META.filename, FOLDER),
+    ).toThrow('require("path") is not available');
   });
 
   it("throws on a syntax error", () => {

@@ -16,6 +16,7 @@
 
 import { getReact, getReactDOM, type BdReact, type BdReactDom } from "../modules/discord-modules";
 import { PluginsApi, ThemesApi } from "./addonapi";
+import { Components } from "./components";
 import { ContextMenu } from "./contextmenu";
 import { Data, BoundData } from "./data";
 import { DOM, BoundDOM } from "./dom";
@@ -43,6 +44,7 @@ const contextMenuInstance = new ContextMenu();
 const hooksInstance = new Hooks();
 const pluginsApi = new PluginsApi();
 const themesApi = new ThemesApi();
+const componentsInstance = new Components();
 const instances = new Map<string, BdApi>();
 
 export class BdApi {
@@ -83,6 +85,9 @@ export class BdApi {
 
   /** React hooks with plugin scoping. */
   static readonly Hooks: Hooks = hooksInstance;
+
+  /** Commonly used React components, resolved once Discord's React exists. */
+  static readonly Components: Components = componentsInstance;
 
   /** BetterDiscord's plugin manager (folder/enable/disable/...). */
   static readonly Plugins: PluginsApi = pluginsApi;
@@ -205,6 +210,11 @@ export class BdApi {
    */
   get Hooks(): BoundHooks {
     return this.#scopedHooks ?? (hooksInstance as unknown as BoundHooks);
+  }
+
+  /** Commonly used React components — shared, never name-bound. */
+  get Components(): Components {
+    return componentsInstance;
   }
 
   /** BetterDiscord's plugin manager — shared, never name-bound. */
