@@ -128,76 +128,61 @@ probes (`gearFound`, `ionTabMounted`, …) are likewise expected to be false at
 against a `shelter` global built to upstream's shapes (`6d42725f`, CC0-1.0;
 every deliberate difference listed in [THIRD_PARTY.md](../THIRD_PARTY.md)).
 
-**Measured, live index sweep, 131 plugins, 180 s Tier 2 soak: 102 pass, 11
-warnings, 17 fail, 1 deferred** (generated at
-[`compat-shelter-index.md`](./compat-shelter-index.md)). That is up from
-101/18 on the first post-attribution sweep. Each recovered plugin and each
-remaining failure has a one-line reason on the scoreboard — the sweep's
-entries are generated, so the recurring ones are diagnosed in
-`compat-harness/src/shelter-diagnoses.ts`, each written against the
-plugin's own published source.
+**Measured, live index sweep, 131 plugins, 180 s Tier 2 soak: 109 pass, 11
+warnings, 10 fail, 1 deferred** (generated at
+[`compat-shelter-index.md`](./compat-shelter-index.md)). That is 6 plugins
+above the first post-attribution sweep (101 pass / 18 fail) — 8 plugins recovered in total. Each recovered
+plugin and each remaining failure has a one-line reason on the scoreboard — the
+sweep's entries are generated, so the recurring ones are diagnosed in
+`compat-harness/src/shelter-diagnoses.ts`, each written against the plugin's own
+published source.
 
-What the run actually bought:
+What the runs actually bought, in order:
 
 - **Stage 2 (`shelter.ui` = the real `@uwu/shelter-ui`)** cleared the two
-  `shelter.ui.showToast is not available` blockers (Declutter, shelteRPC). Both
-  now start past the toast and fail later on the store defect below, so the
-  adapter gap is closed and what remains is a different, measured thing.
-- **CSP grants**: `raw.githubusercontent.com` (connect+img) and
-  `userpfp.github.io` (connect) were added to the policy extension, which is
-  what let UserPFP's data load. Measured effect: UserPFP went from
-  `Failed to fetch` to **pass** — one plugin recovered outright. tarp cleared
-  the same fetch and now fails later on the store defect.
-- **A real Ion defect, found and verified but deliberately not yet fixed: the
-  plugin store drops every write.** `shelter.plugin.store` is a Solid
-  `createStore` proxy, and in solid-js 1.6.16 that proxy's `set` trap is a
-  no-op that only console-warns (`Cannot mutate a Store directly`), which was
-  reproduced in a unit probe: `store.watchedGuilds = []` then
-  `Array.isArray(store.watchedGuilds)` → `false`. Upstream Shelter uses a
-  valtio proxy instead, which is mutable. Any plugin that seeds its own store
-  and reads it back therefore throws `reading 'length'` / `is not iterable`:
-  ServerSentinel, replace-user-pfp, tarp, and (by the same error shape, not
-  isolated) clean-home, shelteRPC, IntifaceWebSoundboard. **This is the single
-  largest remaining cause of failure in the sweep** and is the next thing to
-  fix once work resumes on it; it is left as measured failures on the
-  scoreboard rather than worked around by loosening anything.
-- Remaining failures outside that: logged-out limits (Server Clock, Profile
-  Theming and No Nitro Upsell await a user or a dispatch that never happens on
-  `/login`), Discord APIs absent from the login build
-  (`DiscordNative`, `MaskedLinkStore`, `getSuperProperties`), plugins that read
-  helpers only shelter's own loader provides (`createChangelogButton`,
-  `scoped.ui.showToast` — which upstream never exposed either), and one plugin
-  whose jsdelivr assets Discord's CSP still blocks.
+  `shelter.ui.showToast is not available` blockers (Declutter, shelteRPC).
+- **The plugin store was dropping every write.** `shelter.plugin.store` was
+  Solid's `createStore` proxy handed over as-is, and in solid-js 1.6.16 that
+  proxy's `set` trap is a no-op that only warns (`Cannot mutate a Store
+directly`). Any plugin that seeded its own store and read it back threw
+  `store.watchedGuilds is not iterable` or `reading 'length'` with nothing
+  naming the cause. Reproduced in a unit probe first (`store.x = []` then
+  `Array.isArray` → `false`), then the store was wrapped so writes route by key
+  path through the setter that came with it — Solid keeps its reactivity, array
+  handling and `unwrap`, and no valtio dependency is needed. Upstream uses
+  valtio here; the difference is recorded under "Deviations from upstream
+  Shelter" in [THIRD_PARTY.md](../THIRD_PARTY.md). **This was the largest single
+  cause of failure in the sweep, and fixing it recovered 6 plugins.**
+- **Two CSP grant rounds**, added one failure at a time rather than up front:
+  `raw.githubusercontent.com` (connect+img) + `userpfp.github.io` (connect)
+  recovered UserPFP outright (`Failed to fetch` → pass) and cleared tarp's data
+  load; then loopback spelled `localhost`, which both Intiface plugins need to
+  reach a local service. Each grant names its consumer in the table in
+  [architecture.md](./architecture.md), which had no CSP section before, and a
+  test pins the boundary so anything outside the table still fails and has to
+  come back to be reviewed.
 
-**Not done, and said plainly.** Stage 3 — `registerSection` drawing into
-Discord's settings, and the two React↔Solid bridges — is not started: the 11
-warnings are plugins whose settings sections are accepted and kept but not
-rendered, which is exactly that gap reporting itself. Both still fail by
-name rather than returning `undefined`. Tier 3 (owner hand-checks) has not
-run; every number above is Tier 1 + Tier 2 automated.
+**Remaining 10 failures**, by cause, each with a one-line reason on the
+scoreboard: three logged-out limits (Server Clock, Profile Theming and No Nitro
+Upsell await a user or a dispatch that never happens on `/login`); Discord APIs
+absent from the login build (`DiscordNative`, `MaskedLinkStore`,
+`getSuperProperties`); plugins reading helpers only shelter's own loader
+provides (`createChangelogButton`, `scoped.ui.showToast` — which upstream never
+exposed either); one plugin (Codeblocks Plus Reloaded) whose jsdelivr assets
+Discord's CSP blocks; and one parsed-JSON failure not yet isolated.
 
-```bash
-export PATH="$HOME/.local/bin:$PATH"   # pnpm 10 location
-pnpm build && pnpm start               # real app: Discord + bolt button in user panel
-pnpm start -- --ion-smoke=/tmp/ion-smoke   # headless checks, writes report.json + screenshot
-```
+**Not done, and said plainly.**
 
-Expected: no menu bar; bolt icon between headphone and gear icons opens the
-Ion debug popover. `report.json` must show `ionShellPreload`, `coreInjected`,
-`debugPanelMounted` all `true`, `webpackStatus` with
-`hooked/ready/byProps/store` all `true` plus a few thousand `factories`
-(`debugPanelWebpack` reads e.g. `6280 factories · finds OK`),
-`pluginsStatus` with `registered: 1, started: 1, failed: 0` and
-`ids: ["ion.diagnostics:started"]` (`debugPanelPlugins` reads `1/1 started`),
-and the settings-UI probes `uiReady`, `ionTabMounted`, `ionPanelActive` all
-`true` with `ionPanelRows > 0`, `ionPanelInScroller` showing the panel inside
-the visible native scroller with Discord's own content hidden, an
-`ionSelectMenu` probe (`position: fixed`, anchored to its trigger, inside the
-viewport) that then closes via Escape, and `rendererErrors: []`. Two
-screenshots are captured — the panel at rest and a select menu open — from a
-window that never appears on screen, so the smoke run is safe while using the
-computer. In the app itself, `Ctrl+Alt+J` should copy a diagnostics report to
-the clipboard.
+- Stage 3 — `registerSection` drawing into Discord's settings, and the two
+  React↔Solid bridges — is not started. The 11 warnings are plugins whose
+  settings sections are accepted and kept but not rendered, which is that gap
+  reporting itself; both bridges still throw their own name rather than being
+  `undefined`.
+- The loopback grant is confirmed: both Intiface plugins recovered with it,
+  which is why the sweep stands where it does.
+- Tier 3 (owner hand-checks) has not run. Every number above is Tier 1 + Tier 2
+  automated, on a logged-out session; the three login-dependent plugins cannot
+  be scored as anything but failed until a signed-in run exists.
 
 ## How to run the compatibility scoreboard
 
