@@ -431,7 +431,13 @@ async function stageShelterIndex(
       let jsUrl: string;
       let manifestUrl: string;
       try {
-        const segments = new URL(url).pathname.split("/").filter((part) => part.length > 0);
+        // The index lists plugin directories without a trailing slash, and a
+        // relative resolution against one drops the last segment:
+        // `.../blur-nsfw` + `plugin.js` is `.../plugin.js`. Normalize the
+        // base to a directory first — which is what shelter's own index
+        // entries already look like.
+        const base = url.endsWith("/") ? url : `${url}/`;
+        const segments = new URL(base).pathname.split("/").filter((part) => part.length > 0);
         const slug = segments.at(-1) ?? "plugin";
         // Three plugins in the index share a slug with another. The index's
         // own order decides, so the same sweep always numbers them the same
@@ -439,8 +445,8 @@ async function stageShelterIndex(
         const seen = taken.get(slug) ?? 0;
         taken.set(slug, seen + 1);
         folder = seen === 0 ? slug : `${slug}-${String(seen + 1)}`;
-        jsUrl = new URL("plugin.js", url).href;
-        manifestUrl = new URL("plugin.json", url).href;
+        jsUrl = new URL("plugin.js", base).href;
+        manifestUrl = new URL("plugin.json", base).href;
       } catch (error) {
         entries.push({
           group: "bulk",
@@ -490,6 +496,18 @@ async function stageShelterIndex(
           : { ...entry, note: `manifest not published: plugin.json ${manifest.reason}` },
       );
     }
+  }
+
+  // A sweep that staged nothing is a broken sweep, not a measurement. The
+  // first sweep got every URL's directory segment dropped by a missing
+  // trailing slash and reported all 131 as deferred — the right verdict for
+  // each entry, and still not something anyone should read as a score.
+  const stagedCount = entries.filter((entry) => entry.unstaged === undefined).length;
+  if (stagedCount === 0) {
+    throw new Error(
+      `the Shelter index sweep staged nothing (${String(entries.length)} entries; ` +
+        `first reason: ${entries[0]?.unstaged ?? "unknown"})`,
+    );
   }
 
   // Provenance for a sweep has to be stronger than a pin, because there is
