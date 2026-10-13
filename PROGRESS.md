@@ -55,15 +55,55 @@ Live log for the phase-6-8 run. Updated at every commit/milestone.
   decision table (all six = real Vencord plugin, WebScreenShareFixes deferred),
   VencordNative shim decisions, smoke + scoreboard how-to.
 
+- Phase 7 commits on this branch (typecheck, lint, 560 tests green):
+
+| Commit    | Summary                                                             |
+| --------- | ------------------------------------------------------------------- |
+| `7465bbc` | compat-bd: scaffold the adapter with the `BdApi` surface            |
+| `ea07c4e` | compat-bd: `BdApi.Webpack` module-search facade                     |
+| `32892c1` | compat-bd: `BdApi.Patcher` monkey-patch engine (upstream port)      |
+| `d47ad3c` | compat-bd: `BdApi.Utils`, `BdApi.DOM`, `BdApi.Data`                 |
+| `d3c7ffc` | compat-bd: React/ReactUtils, UI, Net, ContextMenu, Hooks            |
+| `fc7b89d` | compat-bd: load BetterDiscord plugins from `bd/plugins`             |
+| `9bea2e7` | core: the theme engine                                              |
+| `d07b49e` | compat-bd: load `bd/themes`, expose `BdApi.Plugins`/`BdApi.Themes`  |
+| `743622a` | shell: pass request objects to the fs path scoper                   |
+| `02fed7e` | harness: `--ecosystem bd` with a measured BetterDiscord scoreboard  |
+| `822e200` | compat-bd: `BdApi.Components` and `require("events")`               |
+| `03da438` | compat-bd: evaluate BD plugins at their start stage, not at load    |
+| `abf044e` | core: capture DOM storage before Discord deletes it (both adapters) |
+| `b926524` | compat-bd: export EventEmitter in Node's CJS shape                  |
+| `1ce841f` | shell: report which DOM storage the page kept                       |
+| `52ff4b2` | harness: a hand-written diagnosis beside the measured reason        |
+
+- **Phase 7 scoreboard (measured, logged-out, 180s Tier 2 soak, starter set of
+  10 sha256-pinned plugins):** **7 pass, 0 warnings, 3 fail, 0 deferred.**
+  Failures, each explained on the scoreboard and none excluded: BetterFolders
+  and ChannelTabs are logged-out-limited, LiveTyping hits a getter-only Discord
+  export that upstream's Patcher also cannot write. Generated with reasons,
+  diagnoses and the owner's Tier 3 checklist at `docs/compat-bd.md`; raw run in
+  `compat-runs/bd-post-storage/`.
+- **Root-caused and fixed mid-phase:** Discord's client deletes
+  `window.localStorage` from the window after its own scripts run. Anything
+  reaching for it late found `undefined` — `BdApi.Data` threw on every write and
+  Vencord's settings fell back to defaults (4 of the 10 plugins failed this way
+  before `abf044e`). Core now captures the reference at injection and exposes
+  it as `window.__ION__.storage`; the smoke report records `domStorage` so the
+  condition stays visible: `{"backend":"localStorage","pageExposesLocalStorage":
+"undefined"}`.
+- THIRD_PARTY.md records the BetterDiscord port (Apache-2.0 @ `133bc83`),
+  its vendored stylesheet, lucide icon geometry (ISC), and a "Deviations from
+  upstream BetterDiscord" section covering every deliberate difference.
+
 ## In progress
 
-- Phase 7: BetterDiscord adapter (`packages/compat-bd` — BdApi implementation,
-  BD plugin/theme parsing) per the Q1 proposal in QUESTIONS.md.
+- Phase 8: Shelter adapter (`packages/compat-shelter`) + the bulk harness pass
+  (every plugin each source offers, scored into one generated doc).
 
 ## Next (dependency order)
 
-1. Phase 7 (BD adapter) → Phase 8 (Shelter adapter + bulk scoreboard),
-   then extend `docs/compat.md` with those ecosystems.
+1. Phase 8 (Shelter adapter + bulk scoreboard), then extend the generated docs
+   with those ecosystems.
 2. Theme engine hardening (plain CSS/BD/Vencord headers/hot reload), catalog
    browser (Ion Index + live APIs), packaging (AppImage/.deb/PKGBUILD +
    Windows installer config + manual test checklist).
@@ -72,9 +112,11 @@ Live log for the phase-6-8 run. Updated at every commit/milestone.
 
 ## Resume point
 
-- Branch `phase-6-8`, tree clean and green (typecheck, lint, 276 tests),
-  pushed; latest isolated harness run green (see scoreboard above).
-- Next exact step: scaffold `packages/compat-bd` — `BdApi` surface
-  (`Data`, `DOM`, `React`, `Webpack`, `Utils`, `Plugins`, `UI`), BD plugin
-  parsing (meta header + `start/stop`), and the `PluginFormatAdapter`
-  registration into the host, with unit tests before any live run.
+- Branch `phase-6-8`, tree clean and green (typecheck, lint, 560 tests);
+  latest isolated harness run is the Phase 7 scoreboard above (3 failures
+  recorded, not hidden). Everything through `52ff4b2` is unpushed — the push
+  happens at the phase milestone, never to `main`.
+- Next exact step: scaffold `packages/compat-shelter` — Shelter's addon
+  format (JSON manifest + module function), its `api` surface, and the
+  `PluginFormatAdapter` registration into the host, with unit tests before any
+  live run; then point the harness at the full Shelter list for the bulk pass.
