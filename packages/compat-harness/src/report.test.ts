@@ -147,7 +147,46 @@ describe("analyze", () => {
     const fakeNitro = plugin(report, "FakeNitro");
     expect(fakeNitro.tier2).toBe("fail");
     expect(fakeNitro.status).toBe("fail");
-    expect(report.runHealthy).toBe(false);
+    // Placed on a plugin, so it is that plugin's result rather than a defect
+    // in the measurement: it fails the row (and the exit code with it), and
+    // the run itself still knows what every error it saw belonged to.
+    expect(report.runHealthy).toBe(true);
+    expect(report.run.unattributedRendererErrors).toEqual([]);
+  });
+
+  test("attributes an error by the file it came from, not only by a label", () => {
+    // A Content Security Policy refusal carries no plugin label — all the
+    // evidence it has is the script that provoked it, which for a Shelter
+    // plugin is the `sourceURL` it was evaluated under.
+    const swept: readonly AcceptanceEntry[] = [
+      { group: "bulk", name: "Gone", id: "shelter.gone", url: "https://example.com/gone/" },
+      { group: "bulk", name: "Mine", id: "shelter.mine", url: "https://example.com/mine/" },
+      { group: "bulk", name: "Mine 2", id: "shelter.mine-2", url: "https://example.com/mine-2/" },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 3, started: 3, failed: 0 },
+          ids: ["shelter.gone:started", "shelter.mine:started", "shelter.mine-2:started"],
+          failures: [],
+        },
+        rendererErrors: [
+          "Refused to connect … connect-src [source: s://!SHELTER/mine]",
+          // A folder that extends another folder's name: the marker has to
+          // be matched whole, or this belongs to `mine` as well.
+          "boom [source: s://!SHELTER/mine-2]",
+        ],
+      },
+      swept,
+      { ...OPTIONS, ecosystem: "shelter", upstream: "live index" },
+    );
+
+    expect(plugin(report, "Gone").status).toBe("pass");
+    expect(plugin(report, "Mine").reason).toContain("connect-src");
+    expect(plugin(report, "Mine 2").reason).toContain("boom");
+    expect(report.run.unattributedRendererErrors).toEqual([]);
+    expect(report.runHealthy).toBe(true);
   });
 
   test("unattributed renderer errors fail the run, not a random plugin", () => {

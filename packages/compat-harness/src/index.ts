@@ -269,6 +269,52 @@ function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/**
+ * The `name` a Shelter manifest publishes, or undefined when it publishes
+ * none — the same test `ShelterPluginManager` applies before letting a
+ * manifest name a plugin.
+ */
+function manifestNameOf(bytes: Buffer): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+  return stringField((parsed as Record<string, unknown>)["name"]);
+}
+
+/**
+ * Renames swept entries the way the adapter renames the plugins behind them
+ * when two publish under one name.
+ *
+ * The adapter appends the folder to *every* member of a contested group so
+ * the host's uniqueness rule holds. The harness has to reach the same answer
+ * from its side: a row is keyed by its id, but a console message is
+ * attributed by name, and a name only one side knows would push the second
+ * plugin's own warnings into the run's unattributed bucket — visible, but
+ * credited to nothing.
+ *
+ * Entries that were never staged are left alone: they are not registered, so
+ * they claim no name.
+ */
+function resolveSweepNames(entries: readonly AcceptanceEntry[]): AcceptanceEntry[] {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.unstaged !== undefined) continue;
+    counts.set(entry.name, (counts.get(entry.name) ?? 0) + 1);
+  }
+
+  const prefix = "shelter.";
+  return entries.map((entry) => {
+    if (entry.unstaged !== undefined || (counts.get(entry.name) ?? 0) < 2) return entry;
+    const id = entry.id ?? "";
+    if (!id.startsWith(prefix)) return entry;
+    return { ...entry, name: `${entry.name} (${id.slice(prefix.length)})` };
+  });
+}
+
 /** Provenance for one staged file: where it came from and how it verified. */
 interface StagedFile {
   readonly name: string;
@@ -489,24 +535,34 @@ async function stageShelterIndex(
         });
       }
 
-      const entry: AcceptanceEntry = { group: "bulk", name, id: `shelter.${folder}`, url };
-      entries.push(
-        manifest.ok
-          ? entry
-          : { ...entry, note: `manifest not published: plugin.json ${manifest.reason}` },
-      );
+      // The name the adapter will register it under, not the name the index
+      // lists it with: the manifest's when it is readable, the folder when it
+      // is not — the same two cases, in the same order, that
+      // `ShelterPluginManager#prepare` resolves. A row and the console label
+      // it attributes have to agree, or a plugin's own warnings land in the
+      // run's unattributed bucket instead of on its row.
+      const registeredName = manifest.ok ? manifestNameOf(manifest.bytes) : undefined;
+      entries.push({
+        group: "bulk",
+        name: registeredName ?? folder,
+        id: `shelter.${folder}`,
+        url,
+        ...(manifest.ok ? {} : { note: `manifest not published: plugin.json ${manifest.reason}` }),
+      });
     }
   }
+
+  const resolved = resolveSweepNames(entries);
 
   // A sweep that staged nothing is a broken sweep, not a measurement. The
   // first sweep got every URL's directory segment dropped by a missing
   // trailing slash and reported all 131 as deferred — the right verdict for
   // each entry, and still not something anyone should read as a score.
-  const stagedCount = entries.filter((entry) => entry.unstaged === undefined).length;
+  const stagedCount = resolved.filter((entry) => entry.unstaged === undefined).length;
   if (stagedCount === 0) {
     throw new Error(
-      `the Shelter index sweep staged nothing (${String(entries.length)} entries; ` +
-        `first reason: ${entries[0]?.unstaged ?? "unknown"})`,
+      `the Shelter index sweep staged nothing (${String(resolved.length)} entries; ` +
+        `first reason: ${resolved[0]?.unstaged ?? "unknown"})`,
     );
   }
 
@@ -514,9 +570,11 @@ async function stageShelterIndex(
   // none: every file that was staged, with the digest it actually had.
   await writeStaged(artifactsDir, "shelter-index-staged.json", staged);
   // Doubles as the entry list for `--report`, so a sweep can be re-analyzed
-  // without re-fetching the catalog.
-  await writeStaged(artifactsDir, "shelter-index.json", entries);
-  return entries;
+  // without re-fetching the catalog. Renaming is idempotent — once the names
+  // are unique, a second pass finds nothing contested — so reloading it
+  // cannot suffix a name twice.
+  await writeStaged(artifactsDir, "shelter-index.json", resolved);
+  return resolved;
 }
 
 async function runSmoke(
@@ -693,10 +751,15 @@ async function main(): Promise<void> {
       process.stderr.write(`[compat] FAIL ${plugin.name}: ${plugin.reason ?? "unknown"}\n`);
     }
     if (!report.runHealthy) {
-      for (const error of report.run.rendererErrors) {
-        process.stderr.write(`[compat] renderer error: ${error}\n`);
+      // Attributed errors already went out above as that plugin's FAIL line.
+      // These are the ones the run could not place — the reason the
+      // measurement itself is in doubt rather than just a plugin.
+      for (const error of report.run.unattributedRendererErrors) {
+        process.stderr.write(`[compat] unattributed renderer error: ${error}\n`);
       }
-      process.stderr.write("[compat] run unhealthy: unexpected renderer errors\n");
+      process.stderr.write(
+        "[compat] run unhealthy: renderer errors no plugin could be blamed for\n",
+      );
     }
     if (failed.length > 0 || !report.runHealthy) process.exitCode = 1;
   } finally {

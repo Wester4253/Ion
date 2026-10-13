@@ -25,6 +25,20 @@ function maxWarnings(): number {
 }
 
 /**
+ * One captured console error plus where it came from.
+ *
+ * The origin is appended rather than stored beside the message so every
+ * reader of `rendererErrors` — the run's health check, the scoreboard, the
+ * owner reading a diff — sees one string and cannot quote an error without
+ * its source. `sourceId` is the URL of the log source, which for code
+ * evaluated under a `sourceURL` is the code itself, and for a Content
+ * Security Policy refusal is the only clue the message carries.
+ */
+function withSource(message: string, sourceId: string): string {
+  return sourceId.trim().length > 0 ? `${message} [source: ${sourceId}]` : message;
+}
+
+/**
  * A backstop against a runaway log, not a data-loss point. A hundred is
  * right for a ten-plugin acceptance set and wrong for a sweep of a hundred
  * and thirty: a cap reached in the middle converts every plugin logged after
@@ -75,7 +89,9 @@ export function runSmoke(
   const warnings = new Set<string>();
   win.webContents.on("console-message", (details) => {
     if (details.level === "warning") {
-      if (warnings.size < MAX_WARNINGS) warnings.add(details.message);
+      if (warnings.size < MAX_WARNINGS) {
+        warnings.add(withSource(details.message, details.sourceId));
+      }
       return;
     }
     if (details.level !== "error") return;
@@ -84,7 +100,12 @@ export function runSmoke(
       expectedErrors.set(expected.reason, (expectedErrors.get(expected.reason) ?? 0) + 1);
       return;
     }
-    rendererErrors.push(details.message);
+    // Carry where it came from. A message on its own says what broke; the
+    // source says whose it was, which is the difference between blaming a
+    // plugin and blaming the run. For code eval'd under a `sourceURL` that
+    // is the plugin itself, and for a Content Security Policy refusal it is
+    // the only clue the message has.
+    rendererErrors.push(withSource(details.message, details.sourceId));
   });
 
   /**

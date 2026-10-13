@@ -158,7 +158,15 @@ export interface CompatReport {
     };
   };
   readonly plugins: readonly CompatPluginReport[];
-  /** True only when every check ran clean: no renderer errors, no failures. */
+  /**
+   * True only when everything the run produced was attributable.
+   *
+   * An error placed on a plugin is a *result* — it fails that plugin's row
+   * and the process exits non-zero for it — so it does not make the run
+   * itself unsound. An error that could not be placed does: it is the
+   * measurement saying it does not know what it was looking at. Every
+   * renderer error stays in `run.rendererErrors` either way.
+   */
   readonly runHealthy: boolean;
 }
 
@@ -178,8 +186,23 @@ function oneLine(message: string): string {
     : `${collapsed.slice(0, MAX_REASON_LENGTH - 1)}…`;
 }
 
+/**
+ * The origin Shelter evaluates a plugin's code under, when the entry names
+ * one.
+ *
+ * Every plugin file is evaluated with a `sourceURL` that names its folder,
+ * and the smoke capture appends a message's source to it — so for these
+ * entries the file is available as evidence, not just the label the plugin
+ * wrote for itself.
+ */
+function shelterOrigin(id: string | undefined): string | undefined {
+  return id?.startsWith("shelter.") === true
+    ? `s://!SHELTER/${id.slice("shelter.".length)}`
+    : undefined;
+}
+
 /** Patterns that identify a message as belonging to `name`. */
-function isAttributedTo(message: string, name: string): boolean {
+function isAttributedTo(message: string, name: string, origin?: string): boolean {
   // BdApi's logger prints `%c[Name]%c` with console style arguments; if the
   // format specifiers survive into the captured text, drop them before
   // matching (a no-op for already-formatted messages).
@@ -187,7 +210,13 @@ function isAttributedTo(message: string, name: string): boolean {
   return (
     text.startsWith(`[${name}]`) ||
     text.startsWith(`${name}:`) ||
-    new RegExp(`\\bplugin ${name}\\b`).test(text)
+    new RegExp(`\\bplugin ${name}\\b`).test(text) ||
+    // …or the message says where it came from. Stronger than any phrasing:
+    // an error raised under a plugin's own `sourceURL` could not have been
+    // produced anywhere else, and a Content Security Policy refusal often
+    // carries nothing but this. Matched as the whole bracketed marker, not a
+    // bare substring: `s://!SHELTER/a` is a prefix of `s://!SHELTER/a-2`.
+    (origin !== undefined && text.includes(`[source: ${origin}]`))
   );
 }
 
@@ -195,11 +224,12 @@ function isAttributedTo(message: string, name: string): boolean {
 function partitionAttributed(
   messages: readonly string[],
   name: string,
+  origin?: string,
 ): [attributed: string[], rest: string[]] {
   const attributed: string[] = [];
   const rest: string[] = [];
   for (const message of messages) {
-    (isAttributedTo(message, name) ? attributed : rest).push(message);
+    (isAttributedTo(message, name, origin) ? attributed : rest).push(message);
   }
   return [attributed, rest];
 }
@@ -234,7 +264,7 @@ export function analyze(
   {
     let rest = [...rendererErrors];
     for (const entry of acceptance) {
-      const [mine, leftover] = partitionAttributed(rest, entry.name);
+      const [mine, leftover] = partitionAttributed(rest, entry.name, shelterOrigin(entry.id));
       if (mine.length > 0) perPluginRendererErrors.set(entry.name, mine);
       rest = leftover;
     }
@@ -245,7 +275,12 @@ export function analyze(
   const plugins: CompatPluginReport[] = [];
 
   for (const entry of acceptance) {
-    const [pluginWarnings, leftover] = partitionAttributed(unattributedWarnings, entry.name);
+    const origin = shelterOrigin(entry.id);
+    const [pluginWarnings, leftover] = partitionAttributed(
+      unattributedWarnings,
+      entry.name,
+      origin,
+    );
     unattributedWarnings = leftover;
 
     // The host keys plugin state by its id; for BetterDiscord plugins that
@@ -392,6 +427,6 @@ export function analyze(
       patchTotals,
     },
     plugins,
-    runHealthy: rendererErrors.length === 0,
+    runHealthy: unattributedRendererErrors.length === 0,
   };
 }
