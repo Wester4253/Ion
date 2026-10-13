@@ -5,17 +5,17 @@ file is rewritten at each phase boundary, not incrementally patched._
 
 ## Done
 
-| Phase | Deliverable                                        | State                                                                                                                                                                                                                                                                                                                                                              |
-| ----- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0     | Workspace, strict TS, lint/format/hooks, packaging | Green: clean-clone `pnpm install --frozen-lockfile` builds and tests                                                                                                                                                                                                                                                                                               |
-| 1     | Desktop shell (Electron, secure window, tray, IPC) | Live-tested on Wayland + NVIDIA: login/app loads, close-to-tray, single instance, screenshare permission path                                                                                                                                                                                                                                                      |
-| 2     | Injection, typed IPC bridge, restricted `require`  | Live-tested: core runs in main world at T+~110ms, debug panel docked next to Discord's settings gear                                                                                                                                                                                                                                                               |
-| 3     | Webpack discovery + source-text patch engine       | Live-tested: chunk hook intercepts rspack's chain, 6k+ factories wrapped, `findStore("UserStore")` and friends hit                                                                                                                                                                                                                                                 |
-| 4     | Settings store + native plugin host                | Live-tested: bundled `ion.diagnostics` starts at boot (`1/1 started`), toggle/stop/patch-removal paths unit-tested                                                                                                                                                                                                                                                 |
-| 5     | In-Discord UI foundation (settings page)           | Live-tested headlessly: Ion tab injected into the real settings sidebar; panel renders inside Discord's native scroller with native-matched controls (switches, selects)                                                                                                                                                                                           |
-| 6     | Vencord/Equicord adapter + acceptance scoreboard   | Measured: 32/32 plugins load on a logged-out session (30 pass, 1 warnings, 0 fail, 1 deferred) through a 180s Tier 2 soak; generated `docs/compat.md`                                                                                                                                                                                                              |
-| 7     | BetterDiscord adapter (`BdApi`, plugin/theme load) | Measured: 10-plugin starter set on a logged-out session, 7 pass / 0 warnings / 3 fail / 0 deferred through a 180s Tier 2 soak; generated `docs/compat-bd.md`                                                                                                                                                                                                       |
-| 8     | Shelter adapter + bulk scoreboard                  | **In progress.** Starter set measured 9 pass / 1 warnings / 0 fail ([compat-shelter.md](./compat-shelter.md)); index sweep 101 pass / 11 warnings / 18 fail ([compat-shelter-index.md](./compat-shelter-index.md)). Stage 2 (`shelter.ui` = real `@uwu/shelter-ui`, both settings dialogs) is in the tree; stage 3 (settings sections, React↔Solid bridges) is not |
+| Phase | Deliverable                                        | State                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0     | Workspace, strict TS, lint/format/hooks, packaging | Green: clean-clone `pnpm install --frozen-lockfile` builds and tests                                                                                                                                                                                                                                                                                                                                                                       |
+| 1     | Desktop shell (Electron, secure window, tray, IPC) | Live-tested on Wayland + NVIDIA: login/app loads, close-to-tray, single instance, screenshare permission path                                                                                                                                                                                                                                                                                                                              |
+| 2     | Injection, typed IPC bridge, restricted `require`  | Live-tested: core runs in main world at T+~110ms, debug panel docked next to Discord's settings gear                                                                                                                                                                                                                                                                                                                                       |
+| 3     | Webpack discovery + source-text patch engine       | Live-tested: chunk hook intercepts rspack's chain, 6k+ factories wrapped, `findStore("UserStore")` and friends hit                                                                                                                                                                                                                                                                                                                         |
+| 4     | Settings store + native plugin host                | Live-tested: bundled `ion.diagnostics` starts at boot (`1/1 started`), toggle/stop/patch-removal paths unit-tested                                                                                                                                                                                                                                                                                                                         |
+| 5     | In-Discord UI foundation (settings page)           | Live-tested headlessly: Ion tab injected into the real settings sidebar; panel renders inside Discord's native scroller with native-matched controls (switches, selects)                                                                                                                                                                                                                                                                   |
+| 6     | Vencord/Equicord adapter + acceptance scoreboard   | Measured: 32/32 plugins load on a logged-out session (30 pass, 1 warnings, 0 fail, 1 deferred) through a 180s Tier 2 soak; generated `docs/compat.md`                                                                                                                                                                                                                                                                                      |
+| 7     | BetterDiscord adapter (`BdApi`, plugin/theme load) | Measured: 10-plugin starter set on a logged-out session, 7 pass / 0 warnings / 3 fail / 0 deferred through a 180s Tier 2 soak; generated `docs/compat-bd.md`                                                                                                                                                                                                                                                                               |
+| 8     | Shelter adapter + bulk scoreboard                  | **In progress.** Live index sweep measured 102 pass / 11 warnings / 17 fail / 1 deferred through a 180 s Tier 2 soak ([compat-shelter-index.md](./compat-shelter-index.md); starter set 9/1/0 in [compat-shelter.md](./compat-shelter.md)). Stage 2 (`shelter.ui` = real `@uwu/shelter-ui`, both settings dialogs) is in and its showToast blockers recovered. Blocking item: the plugin store drops every write — verified, not yet fixed |
 
 Design details live in [architecture.md](./architecture.md); writing plugins
 against the host in [plugin-authoring.md](./plugin-authoring.md); Linux
@@ -127,27 +127,54 @@ probes (`gearFound`, `ionTabMounted`, …) are likewise expected to be false at
 **What runs.** `packages/compat-shelter` evaluates a Shelter plugin's source
 against a `shelter` global built to upstream's shapes (`6d42725f`, CC0-1.0;
 every deliberate difference listed in [THIRD_PARTY.md](../THIRD_PARTY.md)).
-Stage 1 measured the 10-plugin starter set at 9 pass / 1 warnings / 0 fail and
-the full index at 101 pass / 11 warnings / 18 fail through 180s Tier 2 soaks.
 
-**Stage 2, just landed.** `shelter.ui` is no longer a stub: `@uwu/shelter-ui`
-0.0.6 — the published library itself, JSX intact — is compiled into the bundle
-with upstream's own `babel-preset-solid` toolchain, and the two settings
-dialogs (`plugin.showSettings()` with its Done footer,
-`plugins.showSettingsFor(id)` awaiting close) are wired through the library's
-`openModal`. Both mount in jsdom, which is the environment that reproduces
-Chromium's custom-element ordering; happy-dom does not, and the reason is
-written into `reactiveroot.test.tsx`. What stage 2 does _not_ do, it says by
-throwing: the two React↔Solid bridges (`ReactInSolidBridge`,
-`renderSolidInReact`) still fail by name, and they land with stage 3's
-settings-section support. The index scoreboard has not been re-run since stage
-2, so the numbers above are stage-1 numbers.
+**Measured, live index sweep, 131 plugins, 180 s Tier 2 soak: 102 pass, 11
+warnings, 17 fail, 1 deferred** (generated at
+[`compat-shelter-index.md`](./compat-shelter-index.md)). That is up from
+101/18 on the first post-attribution sweep. Each recovered plugin and each
+remaining failure has a one-line reason on the scoreboard — the sweep's
+entries are generated, so the recurring ones are diagnosed in
+`compat-harness/src/shelter-diagnoses.ts`, each written against the
+plugin's own published source.
 
-**Known stage-1 failures** (each explained on the scoreboard, none excluded):
-2 `shelter.ui.showToast` (stage 2 should clear these), 3 lifecycle timeouts,
-2 `Failed to fetch`, 2 unreadable plugin stores, and a handful of
-plugin-side bugs that fail upstream too (reading `store.users` before it is
-seeded, for example). No API is loosened to make one pass.
+What the run actually bought:
+
+- **Stage 2 (`shelter.ui` = the real `@uwu/shelter-ui`)** cleared the two
+  `shelter.ui.showToast is not available` blockers (Declutter, shelteRPC). Both
+  now start past the toast and fail later on the store defect below, so the
+  adapter gap is closed and what remains is a different, measured thing.
+- **CSP grants**: `raw.githubusercontent.com` (connect+img) and
+  `userpfp.github.io` (connect) were added to the policy extension, which is
+  what let UserPFP's data load. Measured effect: UserPFP went from
+  `Failed to fetch` to **pass** — one plugin recovered outright. tarp cleared
+  the same fetch and now fails later on the store defect.
+- **A real Ion defect, found and verified but deliberately not yet fixed: the
+  plugin store drops every write.** `shelter.plugin.store` is a Solid
+  `createStore` proxy, and in solid-js 1.6.16 that proxy's `set` trap is a
+  no-op that only console-warns (`Cannot mutate a Store directly`), which was
+  reproduced in a unit probe: `store.watchedGuilds = []` then
+  `Array.isArray(store.watchedGuilds)` → `false`. Upstream Shelter uses a
+  valtio proxy instead, which is mutable. Any plugin that seeds its own store
+  and reads it back therefore throws `reading 'length'` / `is not iterable`:
+  ServerSentinel, replace-user-pfp, tarp, and (by the same error shape, not
+  isolated) clean-home, shelteRPC, IntifaceWebSoundboard. **This is the single
+  largest remaining cause of failure in the sweep** and is the next thing to
+  fix once work resumes on it; it is left as measured failures on the
+  scoreboard rather than worked around by loosening anything.
+- Remaining failures outside that: logged-out limits (Server Clock, Profile
+  Theming and No Nitro Upsell await a user or a dispatch that never happens on
+  `/login`), Discord APIs absent from the login build
+  (`DiscordNative`, `MaskedLinkStore`, `getSuperProperties`), plugins that read
+  helpers only shelter's own loader provides (`createChangelogButton`,
+  `scoped.ui.showToast` — which upstream never exposed either), and one plugin
+  whose jsdelivr assets Discord's CSP still blocks.
+
+**Not done, and said plainly.** Stage 3 — `registerSection` drawing into
+Discord's settings, and the two React↔Solid bridges — is not started: the 11
+warnings are plugins whose settings sections are accepted and kept but not
+rendered, which is exactly that gap reporting itself. Both still fail by
+name rather than returning `undefined`. Tier 3 (owner hand-checks) has not
+run; every number above is Tier 1 + Tier 2 automated.
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"   # pnpm 10 location
@@ -179,6 +206,8 @@ export PATH="$HOME/.local/bin:$PATH"
 pnpm build
 pnpm --filter @ion/compat-harness report                       # Vencord: 32 plugins → docs/compat.md
 pnpm --filter @ion/compat-harness report -- --ecosystem bd     # BetterDiscord: 10 → docs/compat-bd.md
+pnpm --filter @ion/compat-harness report -- --ecosystem shelter --source index
+                                                               # Shelter: 131 → docs/compat-shelter-index.md
 ```
 
 Exit code 0 means a healthy run with no failed plugins (warnings and the
@@ -191,9 +220,15 @@ Tier-3-verified.
 
 ## Next
 
-- Phase 8: Shelter adapter + the bulk harness pass (every plugin each source
-  offers, scored into one generated doc) — per the Q1 proposal in
-  `QUESTIONS.md`.
+- **Fix the plugin store first.** Solid's `createStore` proxy silently drops
+  writes, which is the largest single cause of Shelter sweep failures
+  (ServerSentinel, replace-user-pfp, tarp, and three same-shaped ones).
+  Upstream uses a mutable valtio proxy; the shape to match is upstream's
+  `@uwu/shelter-storage`. Reproduced in a unit probe, left unfixed on purpose
+  until now.
+- Phase 8 remainder: Shelter stage 3 (settings sections drawn into Discord's
+  settings; the two React↔Solid bridges), then re-measure the sweep — the 11
+  warnings and several reads should move.
 - Then: theme engine hardening, hybrid catalog browser, packaging (AppImage,
   .deb, PKGBUILD; Windows installer + portable).
 - Pending decision: Linux screenshare system audio (Electron has no loopback
