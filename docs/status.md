@@ -210,15 +210,12 @@ Tier-3-verified.
 
 ## Next
 
-- Re-measure the Shelter index sweep with stage 3 in, and regenerate
-  `docs/compat-shelter-index.md` — the six settings warnings are the rows that
-  should move; whatever does not move keeps a one-line reason.
-- Then: hybrid catalog browser (fetch channel, Ion Index + live BetterDiscord and
-  Shelter sources, download → sha256 → stage → install, in-app browser UI).
+- The catalog browser is in and committed (`ion:fetch-url` IPC, CSP grants,
+  core catalog client, UI section). Remaining: owner Tier 3 hand-checks
+  (150 items across three scoreboards), the stage-3 settings checklist, and
+  the open questions Q1–Q7 in `QUESTIONS.md`.
 - Packaging is in (AppImage, .deb, PKGBUILD/.SRCINFO for Arch — see
   [linux.md](./linux.md)); Windows is config plus an untested checklist.
-- Owner: Tier 3 hand-checks (150 items across three scoreboards), the stage-3
-  settings checklist, and the open questions Q1–Q7 in `QUESTIONS.md`.
 - Pending decision: Linux screenshare system audio (Electron has no loopback
   on Linux) — documented workaround, owner sign-off open (Q3); also blocks
   WebScreenShareFixes.

@@ -70,9 +70,12 @@ Discord's document reach is reviewable in one table.
 | Grant                       | Directives               | Consumer                                                                                                              |
 | --------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | `*.vencord.dev`             | `connect-src`, `img-src` | BadgeAPI's badges and their images (upstream grants the same).                                                        |
-| `raw.githubusercontent.com` | `connect-src`, `img-src` | tarp's theme list and userpfp's avatar files.                                                                         |
+| `raw.githubusercontent.com` | `connect-src`, `img-src` | tarp's theme list, userpfp's avatar files, and the Ion Index (`index.json` + compiled Vencord plugin artifacts).      |
 | `userpfp.github.io`         | `connect-src`            | userpfp's manifest (`source/data.json`); it serves no images.                                                         |
 | `ws://localhost:*`          | `connect-src`            | Plugins driving a local service by hostname (Intiface); Discord's own policy permits the same machine as `127.0.0.1`. |
+| `api.betterdiscord.app`     | `connect-src`            | The catalog's BetterDiscord plugin/theme listing.                                                                     |
+| `shindex.uwu.network`       | `connect-src`            | The catalog's live Shelter plugin index.                                                                              |
+| `cdn.jsdelivr.net`          | `connect-src`            | Codeblocks Plus Reloaded's shiki-es wasm assets (currently blocked; included so the plugin is measurable).            |
 
 The last two are **a deliberate deviation from stock Discord**, which blocks
 both hosts: a plugin that fetches its data from GitHub would otherwise fail
