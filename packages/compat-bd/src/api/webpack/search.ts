@@ -86,11 +86,18 @@ function resolveLazy(value: () => unknown): unknown {
  * returned unchanged, preserving reference identity for the common case.
  */
 function resolveExports(exports: object): object {
-  const resolved = exports as Record<string, unknown>;
+  // Spread first: it invokes accessor properties once, so a getter that
+  // returns a lazy resolver surfaces as a plain arrow value in the copy.
+  // A throwing getter aborts the spread — fall back to the original.
+  let copy: Record<string, unknown>;
+  try {
+    copy = { ...(exports as Record<string, unknown>) };
+  } catch {
+    return exports;
+  }
   let changed = false;
-  const copy: Record<string, unknown> = { ...resolved };
-  for (const key of Object.keys(exports)) {
-    const value = resolved[key];
+  for (const key of Object.keys(copy)) {
+    const value = copy[key];
     if (isLazyGetter(value)) {
       const actual = resolveLazy(value);
       if (actual !== undefined) {

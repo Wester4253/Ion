@@ -102,10 +102,12 @@ describe("getModule", () => {
   });
 
   it("resolves webpack lazy getters so classes can be extended", () => {
-    function RealStore(this: unknown): void {
-      return undefined;
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class -- the static shape is the point: a store class behind a lazy getter
+    class RealStore {
+      static getName(): string {
+        return "UserStore";
+      }
     }
-    RealStore.getName = (): string => "UserStore";
     // Discord's minified shape: an arrow with no prototype that returns the class.
     const lazy = (): unknown => RealStore;
     useModules({ 1: { Store: lazy } });
@@ -113,7 +115,7 @@ describe("getModule", () => {
     expect(found?.["Store"]).toBe(RealStore);
     expect(() => {
       const Child = class extends (found?.["Store"] as typeof RealStore) {};
-      return Child;
+      return Child.name;
     }).not.toThrow();
   });
 
@@ -121,6 +123,24 @@ describe("getModule", () => {
     const userStore = { _dispatchToken: "t", getName: () => "UserStore" };
     useModules({ 1: userStore });
     expect(api.getStore("UserStore")).toBe(userStore);
+  });
+
+  it("resolves lazy getters hidden behind accessor properties", () => {
+    class RealComponent {
+      render(): null {
+        return null;
+      }
+    }
+    const lazy = (): unknown => RealComponent;
+    const moduleWithGetter = {};
+    Object.defineProperty(moduleWithGetter, "Component", {
+      get: () => lazy,
+      enumerable: true,
+      configurable: true,
+    });
+    useModules({ 1: moduleWithGetter });
+    const found = api.getModule(byKeys(["Component"])) as Record<string, unknown> | undefined;
+    expect(found?.["Component"]).toBe(RealComponent);
   });
 
   it("returns undefined on a miss and throws when fatal", () => {
