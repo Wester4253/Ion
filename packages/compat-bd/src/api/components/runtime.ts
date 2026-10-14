@@ -7,7 +7,7 @@
  * the whole surface unit-testable with a fake React.
  */
 
-import { getReact } from "../../modules/discord-modules";
+import { loadedReact } from "../../modules/discord-modules";
 
 /** Discord's React, narrowed to what the ported components call. */
 export interface ComponentsReact {
@@ -43,7 +43,9 @@ export interface ComponentsReact {
 
 /** Discord's React, or undefined while it is still unavailable. */
 export function componentsReact(): ComponentsReact | undefined {
-  return getReact() as unknown as ComponentsReact | undefined;
+  const React = loadedReact() as unknown as ComponentsReact | undefined;
+  if (!React || typeof React.createElement !== "function") return undefined;
+  return React;
 }
 
 /**

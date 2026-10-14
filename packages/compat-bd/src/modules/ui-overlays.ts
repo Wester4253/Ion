@@ -23,6 +23,7 @@ import {
   getNoticesPageClasses,
   getReact,
   getReactDOM,
+  type BdReact,
 } from "./discord-modules";
 
 export type ToastType = "default" | "info" | "success" | "warning" | "error";
@@ -421,9 +422,29 @@ function renderInto(container: HTMLElement, content: unknown): () => void {
 
   if (reactChildren.length === 0) return () => undefined;
 
-  const React = getReact();
-  const ReactDOM = getReactDOM();
-  if (!React || !ReactDOM?.createRoot) {
+  let React: BdReact | undefined;
+  let createRoot:
+    ((container: Element) => { render(node: unknown): void; unmount(): void }) | undefined;
+  try {
+    // Touch members to force proxy evaluation; throws while unloaded.
+    const react = getReact();
+    const reactDOM = getReactDOM();
+    const rootFactory: unknown = reactDOM.createRoot;
+    if (typeof react.createElement === "function" && typeof rootFactory === "function") {
+      React = react;
+      createRoot = (container: Element): { render(node: unknown): void; unmount(): void } =>
+        (
+          rootFactory.bind(reactDOM) as (c: Element) => {
+            render(n: unknown): void;
+            unmount(): void;
+          }
+        )(container);
+    }
+  } catch {
+    React = undefined;
+    createRoot = undefined;
+  }
+  if (!React || !createRoot) {
     Logger.warn(
       "UI~renderContent",
       "React modal content needs Discord's react-dom; rendering the remaining content as text.",
@@ -433,7 +454,7 @@ function renderInto(container: HTMLElement, content: unknown): () => void {
 
   const mount = document.createElement("div");
   container.append(mount);
-  const root = ReactDOM.createRoot(mount);
+  const root = createRoot(mount);
   root.render(React.createElement(React.Fragment, null, ...reactChildren));
   return () => {
     root.unmount();

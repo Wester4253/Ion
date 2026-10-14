@@ -36,24 +36,34 @@ afterEach(() => {
 });
 
 describe("getReact", () => {
-  it("stays unresolved until the module exists, then memoizes", () => {
-    // Before Discord loads, the lookup must miss rather than throw.
-    expect(getReact()).toBeUndefined();
+  it("returns a proxy that resolves once the module exists", () => {
+    // Before Discord loads, the proxy exists but property access throws
+    // a descriptive error rather than yielding undefined.
+    const early = getReact();
+    expect(() => (early as unknown as Record<string, unknown>)["createElement"]).toThrow(
+      "BdApi.React",
+    );
 
     const fakeReact = { createElement: () => undefined, cloneElement: () => undefined };
     findable.push(fakeReact);
-    expect(getReact()).toBe(fakeReact);
+    expect((getReact() as unknown as Record<string, unknown>)["createElement"]).toBe(
+      fakeReact.createElement,
+    );
 
-    // Memoized: later loads (or a different module matching the filter) do
-    // not change the resolved singleton.
+    // Same proxy identity across calls; the resolved module is memoized.
+    expect(getReact()).toBe(early);
     findable.length = 0;
-    expect(getReact()).toBe(fakeReact);
+    expect((getReact() as unknown as Record<string, unknown>)["createElement"]).toBe(
+      fakeReact.createElement,
+    );
   });
 });
 
 describe("getReactDOM", () => {
-  it("returns undefined before the base module exists", () => {
-    expect(getReactDOM()).toBeUndefined();
+  it("throws a descriptive error before the base module exists", () => {
+    expect(() => (getReactDOM() as unknown as Record<string, unknown>)["createPortal"]).toThrow(
+      "BdApi.ReactDOM",
+    );
   });
 
   it("yields a base-only snapshot, then the stable merged module", () => {
@@ -61,18 +71,18 @@ describe("getReactDOM", () => {
     const base = { createPortal };
     findable.push(base);
 
-    const snapshot = getReactDOM();
-    expect(snapshot?.createPortal).toBe(createPortal);
-    expect(snapshot?.createRoot).toBeUndefined();
+    const snapshot = getReactDOM() as Record<string, unknown>;
+    expect(snapshot["createPortal"]).toBe(createPortal);
+    expect(snapshot["createRoot"]).toBeUndefined();
     // Base-only identity is stable while the client chunk is missing.
     expect(getReactDOM()).toBe(snapshot);
 
     const createRoot = (): undefined => undefined;
     findable.push({ createRoot });
 
-    const merged = getReactDOM();
-    expect(merged?.createPortal).toBe(createPortal);
-    expect(merged?.createRoot).toBe(createRoot);
+    const merged = getReactDOM() as Record<string, unknown>;
+    expect(merged["createPortal"]).toBe(createPortal);
+    expect(merged["createRoot"]).toBe(createRoot);
     // Once both parts resolve, identity stabilizes on the merged module.
     expect(getReactDOM()).toBe(merged);
   });

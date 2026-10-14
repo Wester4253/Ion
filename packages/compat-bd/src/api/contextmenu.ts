@@ -20,7 +20,7 @@ import { discovery } from "../host";
 import { DOMManager } from "../modules/dommanager";
 import {
   getDispatcher,
-  getReact,
+  loadedReact,
   type BdReact,
   type BdReactElement,
 } from "../modules/discord-modules";
@@ -318,7 +318,7 @@ class MenuPatcher {
 
   /** Wraps the menu component so patches see every rendered menu tree. */
   static handleRender(Component: unknown): unknown {
-    const React = getReact();
+    const React = loadedReact();
     if (!React) return Component;
 
     const fNode = { type: Component } as BdReactElement;
@@ -399,7 +399,7 @@ class MenuPatcher {
   /** Patches nested layers of a rendered tree, depth-bounded. */
   static patchRecursive(target: BdReactElement, iteration = 0): void {
     if (iteration >= MenuPatcher.MAX_PATCH_ITERATIONS) return;
-    const React = getReact();
+    const React = loadedReact();
     if (!React) return;
     const depth = ++iteration;
 
@@ -597,7 +597,7 @@ function componentFor(name: keyof MenuComponentsShape, caller: string): unknown 
 }
 
 function reactFor(caller: string): BdReact | undefined {
-  const React = getReact();
+  const React = loadedReact();
   if (!React) Logger.error(caller, "Discord's React is not available; the menu cannot be built.");
   return React;
 }

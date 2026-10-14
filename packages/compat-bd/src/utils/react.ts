@@ -13,7 +13,7 @@
  */
 
 import { Logger } from "../common/logger";
-import { getReact, type BdComponentClass, type BdReact } from "../modules/discord-modules";
+import { loadedReact, type BdComponentClass, type BdReact } from "../modules/discord-modules";
 
 const exoticComponents = {
   memo: Symbol.for("react.memo"),
@@ -58,7 +58,7 @@ export interface BdFiber {
 }
 
 function reactOrFail(who: string): BdReact {
-  const React = getReact();
+  const React = loadedReact();
   if (!React) {
     throw new Error(`BdApi.${who}: Discord's React is not loaded yet`);
   }

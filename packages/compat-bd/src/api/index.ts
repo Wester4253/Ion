@@ -96,12 +96,12 @@ export class BdApi {
   static readonly Themes: ThemesApi = themesApi;
 
   /** Discord's React, resolved on first access. */
-  static get React(): BdReact | undefined {
+  static get React(): BdReact {
     return getReact();
   }
 
   /** Discord's react-dom, resolved on first access. */
-  static get ReactDOM(): BdReactDom | undefined {
+  static get ReactDOM(): BdReactDom {
     return getReactDOM();
   }
 

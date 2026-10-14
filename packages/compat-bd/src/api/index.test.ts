@@ -109,12 +109,21 @@ describe("plugin-scoped instances", () => {
 
 describe("deferred React getters", () => {
   it("resolve Discord's React on first access", () => {
-    expect(BdApi.React).toBeUndefined();
-    expect(BdApi.ReactDOM).toBeUndefined();
+    // Before Discord loads, the proxy exists but property access throws.
+    expect(() => (BdApi.React as unknown as Record<string, unknown>)["createElement"]).toThrow(
+      "BdApi.React",
+    );
+    expect(() => (BdApi.ReactDOM as unknown as Record<string, unknown>)["createPortal"]).toThrow(
+      "BdApi.ReactDOM",
+    );
 
     const fakeReact = { createElement: () => undefined, cloneElement: () => undefined };
     findable.push(fakeReact);
-    expect(BdApi.React).toBe(fakeReact);
-    expect(new BdApi("PluginF").React).toBe(fakeReact);
+    expect((BdApi.React as unknown as Record<string, unknown>)["createElement"]).toBe(
+      fakeReact.createElement,
+    );
+    expect(
+      (new BdApi("PluginF").React as unknown as Record<string, unknown>)["createElement"],
+    ).toBe(fakeReact.createElement);
   });
 });

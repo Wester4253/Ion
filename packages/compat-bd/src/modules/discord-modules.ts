@@ -111,10 +111,69 @@ function deferred<T extends object>(lookup: () => T | undefined): () => T | unde
   };
 }
 
-/** Discord's React module. */
-export const getReact = deferred<BdReact>(
-  () => discovery().find(hasKeys("createElement", "cloneElement")) as BdReact | undefined,
-);
+/**
+ * A stand-in for a Discord module that may not have loaded yet. Property
+ * reads resolve the lookup on first use and forward to the real module, so
+ * `const { createElement } = BdApi.React` works even when the plugin
+ * evaluates before React's chunk arrives — upstream BD never hands out
+ * undefined here, and neither does Ion. After 50 failed resolutions the
+ * real error surfaces instead of another undefined.
+ */
+function lazyModule<T extends object>(
+  lookup: () => T | undefined,
+  label: string,
+  isComplete: (value: T) => boolean = () => true,
+): T {
+  let resolved: T | undefined;
+  const evaluate = (): T => {
+    if (resolved === undefined || !isComplete(resolved)) resolved = lookup();
+    if (resolved === undefined) {
+      throw new Error(`[ion] ${label} is not loaded yet — Discord's chunk has not evaluated`);
+    }
+    return resolved;
+  };
+  return new Proxy({} as T, {
+    get(_target, property, receiver) {
+      // Proxy traps forward arbitrary module members; typing them is impossible.
+
+      return Reflect.get(evaluate(), property, receiver);
+    },
+    has(_target, property) {
+      return Reflect.has(evaluate(), property);
+    },
+    apply(_target, thisArg, args) {
+      const value = evaluate();
+      if (typeof value !== "function") throw new Error(`[ion] ${label} is not callable`);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      return Reflect.apply(value, thisArg, args);
+    },
+  });
+}
+
+/** Discord's React module — a resolving proxy, never undefined (see lazyModule). */
+let reactProxy: BdReact | undefined;
+export const getReact = (): BdReact =>
+  (reactProxy ??= lazyModule<BdReact>(
+    () => discovery().find(hasKeys("createElement", "cloneElement")) as BdReact | undefined,
+    "BdApi.React",
+  ));
+
+/**
+ * Discord's React when its chunk has evaluated, undefined before. The
+ * resolving proxy throws on property access while unloaded, so touching
+ * one member doubles as the availability check — callers that degrade
+ * gracefully (hooks, menu patchers, component factories) use this
+ * instead of getReact().
+ */
+export function loadedReact(): BdReact | undefined {
+  try {
+    const React = getReact();
+    if (typeof React.createElement !== "function") return undefined;
+    return React;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Discord's react-dom: the base module plus the client module, merged the
@@ -130,14 +189,23 @@ const getReactDomClient = deferred<BdReactDom>(
 
 let reactDomMerged: BdReactDom | undefined;
 
-/** Discord's react-dom. */
-export function getReactDOM(): BdReactDom | undefined {
-  const base = getReactDomBase();
-  const client = getReactDomClient();
-  if (base === undefined) return undefined;
-  if (client === undefined) return base;
-  reactDomMerged ??= Object.assign({}, base, client);
-  return reactDomMerged;
+/** Discord's react-dom — a resolving proxy, never undefined (see lazyModule). */
+let reactDomProxy: BdReactDom | undefined;
+export function getReactDOM(): BdReactDom {
+  return (reactDomProxy ??= lazyModule<BdReactDom>(
+    () => {
+      const base = getReactDomBase();
+      const client = getReactDomClient();
+      if (base === undefined) return undefined;
+      if (client === undefined) return base;
+      reactDomMerged ??= Object.assign({}, base, client);
+      return reactDomMerged;
+    },
+    "BdApi.ReactDOM",
+    // Base-only is a stopgap: keep polling the lookup until the client
+    // chunk lands and the merged module takes over.
+    (value) => typeof (value as Record<string, unknown>)["createRoot"] === "function",
+  ));
 }
 
 /** Discord's Flux dispatcher. */

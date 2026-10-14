@@ -11,7 +11,7 @@
  * from calling back, which is how ContextMenu unwinds on shutdown.
  */
 
-import { getReact, type BdComponentClass, type BdReactElement } from "./discord-modules";
+import { loadedReact, type BdComponentClass, type BdReactElement } from "./discord-modules";
 import { getType } from "../utils/react";
 
 export type NodePatchCallback = (
@@ -43,7 +43,7 @@ export class NodePatcher {
   /** Wraps `node.type` in place so `callback` sees each rendered node. */
   patch(node: BdReactElement, callback: NodePatchCallback): void {
     if (this.#destroyed) return;
-    const React = getReact();
+    const React = loadedReact();
     if (!React) return;
 
     const isDestroyed = (): boolean => this.#destroyed;

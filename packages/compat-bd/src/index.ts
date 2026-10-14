@@ -29,6 +29,19 @@ Object.defineProperty(window, "BdApi", {
   enumerable: true,
 });
 
+// Upstream BD runs in Electron's renderer, where Node defines `global` as
+// the global object. Ion's page has no Node, but plugins reference `global`
+// as a plain global-object alias (never for Node capabilities), so the
+// adapter provides the alias itself. Guarded: a real Node `global` wins.
+if ((window as unknown as Record<string, unknown>)["global"] === undefined) {
+  Object.defineProperty(window, "global", {
+    value: window,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
 // User-installed BetterDiscord plugins are evaluated once the host is in
 // place. This rejects only when the host itself is missing (a broken
 // injection order), so the adapter-wide failure is reported once rather

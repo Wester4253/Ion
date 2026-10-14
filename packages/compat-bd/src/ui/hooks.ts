@@ -9,7 +9,7 @@
  * Discord's React is resolved lazily (see modules/discord-modules.ts).
  */
 
-import { getReact } from "../modules/discord-modules";
+import { loadedReact } from "../modules/discord-modules";
 
 /** A store anything with change listeners — Discord's Flux stores or BdApi.Utils.Store. */
 export interface StoreLike {
@@ -34,7 +34,7 @@ function shallowEqual(a: unknown, b: unknown): boolean {
 
 /** A hook that forces a re-render when called. */
 export function useForceUpdate(): [count: number, forceUpdate: () => void] {
-  const React = getReact();
+  const React = loadedReact();
   if (!React) return [0, () => undefined];
   const [count, dispatch] = React.useReducer((num: number) => num + 1, 0);
   return [
@@ -62,7 +62,7 @@ export function useStateFromStores<T>(
   isStateEqual: true | ((oldState: T, newState: T) => boolean) = (oldState, newState) =>
     oldState === newState,
 ): T {
-  const React = getReact();
+  const React = loadedReact();
   if (!React) return factory();
 
   const [, forceUpdate] = React.useReducer((num: number) => num + 1, 0);
