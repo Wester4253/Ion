@@ -26,13 +26,50 @@ function resetRegExp(regexp: RegExp): void {
   if (regexp.global || regexp.sticky) regexp.lastIndex = 0;
 }
 
+/**
+ * Whether `prop` resolves through a real property descriptor — an own
+ * property or one inherited along the prototype chain.
+ *
+ * A Proxy whose `get` trap fabricates values (react-aria's defaulting
+ * context proxies, Discord's i18n message table) answers `obj[prop]` for
+ * every string while carrying no descriptor anywhere, so a value check
+ * alone lets those artifacts masquerade as any module — react-aria's
+ * proxy matched `byProps("dispatch", "subscribe")` and poisoned
+ * `FluxDispatcher`. Every genuine module export — plain object props,
+ * `Object.defineProperty` getters, class instances — has descriptors, so
+ * requiring one rejects only the fabrications.
+ */
+function hasPropertyDescriptor(exports: object, prop: string): boolean {
+  let current: object | null = exports;
+  while (current !== null) {
+    try {
+      if (Object.getOwnPropertyDescriptor(current, prop) !== undefined) return true;
+      // The prototype is an object or null by definition; the builtin is
+      // typed `any`, so narrow it back at the boundary.
+      current = Object.getPrototypeOf(current) as object | null;
+    } catch {
+      // A trap throwing during the walk is not a match.
+      return false;
+    }
+  }
+  return false;
+}
+
 export const filters = {
-  /** Modules that expose all the given property names. */
+  /**
+   * Modules that expose all the given property names. The value must be
+   * defined *and* backed by a real descriptor; see
+   * {@link hasPropertyDescriptor}.
+   */
   byProps:
     (...props: string[]): ModuleFilter =>
     (exports) => {
       if (!isIndexable(exports)) return false;
-      return props.every((prop) => exports[prop] !== undefined);
+      // Value check first: it is the cheap one and rejects ordinary misses
+      // before any prototype walk.
+      return props.every(
+        (prop) => exports[prop] !== undefined && hasPropertyDescriptor(exports, prop),
+      );
     },
 
   /** Functions whose source contains all the given fragments. */

@@ -35,6 +35,43 @@ describe("filters.byProps", () => {
     const target = Object.assign(() => undefined, { alpha: 1 });
     expect(filters.byProps("alpha")(target)).toBe(true);
   });
+
+  it("rejects a Proxy that fabricates values without descriptors", () => {
+    // react-aria's defaulting context proxies answer every string key with
+    // a stable fabricated object, held outside the proxy target so no
+    // descriptor ever appears anywhere; unchecked they matched
+    // byProps("dispatch", "subscribe") and became FluxDispatcher.
+    const fabricated = new Map<string, object>();
+    const defaulting = new Proxy(
+      {},
+      {
+        get: (_target, property) => {
+          const key = String(property);
+          let value = fabricated.get(key);
+          if (value === undefined) {
+            value = {};
+            fabricated.set(key, value);
+          }
+          return value;
+        },
+      },
+    );
+    expect(filters.byProps("dispatch", "subscribe")(defaulting)).toBe(false);
+  });
+
+  it("matches class instances through the prototype chain", () => {
+    class Sample {
+      public alpha(): void {
+        return undefined;
+      }
+    }
+    expect(filters.byProps("alpha")(new Sample())).toBe(true);
+  });
+
+  it("matches Proxies that forward real descriptors", () => {
+    const forwarding = new Proxy({ alpha: 1 }, {});
+    expect(filters.byProps("alpha")(forwarding)).toBe(true);
+  });
 });
 
 describe("filters.byCode", () => {

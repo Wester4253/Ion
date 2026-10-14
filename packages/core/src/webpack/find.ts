@@ -19,6 +19,29 @@ export interface FoundModule {
 }
 
 /**
+ * Whether a module's exports IS the page's global object. Core-js's global
+ * shim registers `window` itself as a webpack module, so a nested scan over
+ * it reads arbitrary page properties: getters run their side effects
+ * (Vencord's console shortcuts force component lazies on access) and the
+ * values matched are page objects, not webpack exports — a defaulting
+ * Proxy cached on `window` re-matched every scan that touched it. The
+ * top-level filter still runs on such a module; only the descent into the
+ * page is skipped.
+ */
+export function isGlobalObject(value: unknown): boolean {
+  return typeof globalThis !== "undefined" && value === globalThis;
+}
+
+/** A filter that throws (a Proxy trap, an uninitialized export) is a miss. */
+export function matches(filter: ModuleFilter, value: unknown): boolean {
+  try {
+    return filter(value);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * First loaded module (or nested export) matching the filter.
  *
  * Skipping unloaded/null entries and swallowing throwing getters mirrors
@@ -33,13 +56,14 @@ export function findInCache(
     const entry = cache[id];
     if (!entry?.loaded || entry.exports == null) continue;
 
-    if (filter(entry.exports)) return { id, exports: entry.exports };
+    if (matches(filter, entry.exports)) return { id, exports: entry.exports };
 
     if (options.topLevelOnly || typeof entry.exports !== "object") continue;
+    if (isGlobalObject(entry.exports)) continue;
     for (const key in entry.exports) {
       try {
         const nested = (entry.exports as Record<string, unknown>)[key];
-        if (nested != null && filter(nested)) return { id, exports: nested };
+        if (nested != null && matches(filter, nested)) return { id, exports: nested };
       } catch {
         // A throwing getter (circular init, defensive getters) is a miss,
         // not a failure of the search.
@@ -61,13 +85,14 @@ export function findAllInCache(
     const entry = cache[id];
     if (!entry?.loaded || entry.exports == null) continue;
 
-    if (filter(entry.exports)) results.push(entry.exports);
+    if (matches(filter, entry.exports)) results.push(entry.exports);
 
     if (options.topLevelOnly || typeof entry.exports !== "object") continue;
+    if (isGlobalObject(entry.exports)) continue;
     for (const key in entry.exports) {
       try {
         const nested = (entry.exports as Record<string, unknown>)[key];
-        if (nested != null && filter(nested)) results.push(nested);
+        if (nested != null && matches(filter, nested)) results.push(nested);
       } catch {
         continue;
       }

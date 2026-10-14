@@ -23,7 +23,14 @@ import {
 } from "../patches";
 import type { IonWebpackStatus } from "../platform/shell";
 import { filters, stringMatches, type CodeFilter, type ModuleFilter } from "./filters";
-import { findAllInCache, findInCache, type FindOptions, type ModuleCache } from "./find";
+import {
+  findAllInCache,
+  findInCache,
+  isGlobalObject,
+  matches,
+  type FindOptions,
+  type ModuleCache,
+} from "./find";
 import { installChunkHook, type ChunkHook } from "./hook";
 import { createWebpackRuntime, type WebpackRuntime } from "./runtime";
 import type { ModuleFactory, WebpackRequire } from "./types";
@@ -199,27 +206,58 @@ export function waitFor(
   }
 
   const unsubscribe = runtime.onModule((moduleExports, id) => {
-    if (predicate(moduleExports)) {
+    if (matches(predicate, moduleExports)) {
       unsubscribe();
-      listener(moduleExports, id);
+      fireListener(listener, moduleExports, id);
       return;
     }
-    if (typeof moduleExports !== "object") return;
+    if (typeof moduleExports !== "object" || isGlobalObject(moduleExports)) return;
     for (const key in moduleExports) {
+      let nested: unknown;
       try {
-        const nested = (moduleExports as Record<string, unknown>)[key];
-        if (nested != null && predicate(nested)) {
-          unsubscribe();
-          listener(nested, id);
-          return;
-        }
+        nested = (moduleExports as Record<string, unknown>)[key];
       } catch {
-        // Throwing getter: not a match, keep scanning.
+        // A throwing getter (circular init, defensive getters) is a miss,
+        // not a failure of the scan.
         continue;
+      }
+      if (nested != null && matches(predicate, nested)) {
+        unsubscribe();
+        fireListener(listener, nested, id);
+        return;
       }
     }
   });
   return unsubscribe;
+}
+
+/**
+ * A waitFor listener that throws is contained and logged the way upstream
+ * contains it: the failure belongs to that callback, never to the module
+ * dispatch every other subscriber is waiting inside. Without this a
+ * listener's throw was swallowed by the getter guard above and left the
+ * caller holding a silently half-applied assignment — a poisoned
+ * `FluxDispatcher` binding with no diagnostic.
+ */
+function fireListener(
+  listener: (exports: unknown, id: PropertyKey) => void,
+  exports: unknown,
+  id: PropertyKey,
+): void {
+  try {
+    listener(exports, id);
+  } catch (error) {
+    logger.error(
+      "Error while firing callback for Webpack waitFor subscription:\n",
+      error,
+      "\n\nModule exports:",
+      exports,
+      "\n\nCallback:",
+      listener,
+      "\n\nModule id:",
+      String(id),
+    );
+  }
 }
 
 export function findLazy(filter: ModuleFilter): unknown {

@@ -52,6 +52,31 @@ describe("findInCache", () => {
     expect(findInCache(cache, filters.byProps("missing"))).toBeUndefined();
     expect(findInCache(cache, filters.byProps("visible"))?.exports).toBe(poisoned);
   });
+
+  it("treats a throwing filter as a miss for that module", () => {
+    const cache: ModuleCache = { 1: { id: 1, loaded: true, exports: { alpha: 1 } } };
+    const throwing = (): boolean => {
+      throw new Error("filter trap");
+    };
+
+    expect(() => findInCache(cache, throwing)).not.toThrow();
+    expect(findInCache(cache, throwing)).toBeUndefined();
+    expect(findAllInCache(cache, throwing)).toEqual([]);
+  });
+
+  it("filters at top level but never descends into the global object", () => {
+    // The global shim registers the page's global object itself as a
+    // module; descending into it reads arbitrary page getters (running
+    // their side effects) and matches page objects, so only the nested
+    // scan is suppressed.
+    const cache: ModuleCache = {
+      1: { id: 1, loaded: true, exports: globalThis as unknown as object },
+    };
+
+    expect(findInCache(cache, filters.byProps("nonexistentGlobal"))).toBeUndefined();
+    expect(findInCache(cache, (value) => value === globalThis)).toMatchObject({ id: "1" });
+    expect(findAllInCache(cache, filters.byProps("nonexistentGlobal"))).toEqual([]);
+  });
 });
 
 describe("findAllInCache", () => {
