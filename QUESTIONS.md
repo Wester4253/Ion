@@ -22,26 +22,29 @@ on everything unblocked; only truly blocking items stop the run.
   posture for third-party services is to stay blocked.
 - **Status**: open; USRBG measured failing with a diagnosis in the meantime.
 
-## Q9: script-src for cdn.jsdelivr.net (Pyodide), Google Fonts stay blocked
+## Q9: two CSP grants that need the owner's posture call
 
-- **Question**: `toki pona taso` loads Pyodide from `cdn.jsdelivr.net`
-  (script-src) to run its word lookup. Ion's grant table has never granted
-  a script-src: unlike connect/img/style, it executes third-party code
-  inside Discord's document. Grant it (consumer recorded like every other
-  row), or leave it blocked?
-- **Why it matters**: with the grant the plugin passes; without it, it is a
-  measured failure with a diagnosis. Granting widens the page's
-  attack surface beyond any current grant, so it is a posture call, not a
-  compat detail. (`fonts.googleapis.com` style-src for DiscordFeed's font
-  is the same shape but non-fatal — it stays blocked as an expected
+- **Question**:
+  1. `toki pona taso` loads Pyodide from `cdn.jsdelivr.net`
+     (**script-src**). Ion has never granted a script-src: unlike
+     connect/img/style, it executes third-party code inside Discord's
+     document.
+  2. `Snazzy Shelter` fetches every repo in the Cumcord themes list at
+     start — a **dynamic set of third-party `*.github.io` hosts**. A
+     wildcard `*.github.io` connect grant would make it pass; one host at
+     a time cannot (the list moves).
+- **Why it matters**: both widen the page's attack/data-exfil surface
+  beyond any current grant, so both are posture calls, not compat
+  details. (`fonts.googleapis.com` style-src for DiscordFeed's font is
+  the same shape but non-fatal — it stays blocked as an expected
   refusal; say the word if you want it granted too.)
 - **Options**:
-  1. (a) Grant `cdn.jsdelivr.net` script-src, recorded in `csp.ts` and the
-     architecture table with Pyodide as the consumer.
-  2. (b) Leave it blocked; `toki pona taso` keeps its diagnosis.
-- **Recommended default**: (b) — code-execution grants should be the
-  owner's explicit call.
-- **Status**: open; blocked with a diagnosis in the meantime.
+  1. (a) Grant both, recorded in `csp.ts` and the architecture table with
+     their consumers.
+  2. (b) Leave both blocked; the two plugins keep their diagnoses.
+- **Recommended default**: (b) — code-execution and wildcard-host grants
+  should be the owner's explicit call.
+- **Status**: open; both blocked with diagnoses in the meantime.
 
 ## Q1: Phases 7 and 8 are not defined in docs
 

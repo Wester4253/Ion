@@ -24,9 +24,9 @@ export const SHELTER_INDEX_DIAGNOSES: Readonly<Record<string, string>> = {
   "shelter.Codeblocks Plus Reloaded":
     "Loads syntax-highlighting assets from cdn.jsdelivr.net; connect-src was granted after this failure (see the CSP table) and the plugin now passes.",
   "shelter.snazzy-shelter":
-    "Fetches its theme manifest from cumcordthemes.github.io, which was outside Discord's connect-src until this measured failure drove the grant in `csp.ts`; re-measure expected to pass.",
+    "Fetches every repo in the Cumcord themes list at start — dozens of third-party github.io hosts plus raw.githubusercontent files. The manifest host was granted after this failure; every other repo host is still outside connect-src (each refusal lands, attributed, on this row) and some listed files 404 upstream. A wildcard `*.github.io` connect grant would make it pass; that breadth is an owner decision (Q9).",
   "shelter.optimizer":
-    "The old-discord-font stylesheet on cdn.jsdelivr.net is refused by style-src (the `@import` originates in Revert Font's plugin.js); the style-src grant came from this failure — re-measure expected to pass.",
+    "The old-discord-font stylesheet on cdn.jsdelivr.net is refused by style-src (the `@import` originates in Revert Font's plugin.js); the style-src and font-src grants came from this failure and the plugin now passes.",
   "shelter.toki-pona-taso":
     "Loads Pyodide from cdn.jsdelivr.net — script-src, a code-execution grant deliberately left to the owner (QUESTIONS.md Q9) — and its ijo font from rawcdn.githack.com (font-src, refused as an expected error); the script refusal is what fails it.",
   "shelter.server-clock":
