@@ -229,22 +229,26 @@ export function attachSmokeCapture(win: BrowserWindow): SmokeCapture {
       if (warnings.size < MAX_WARNINGS) warnings.add(withSource(message, sourceId));
       return;
     }
-    const expected = EXPECTED_ERRORS.find((entry) => entry.match.test(message));
-    if (expected) {
-      expectedErrors.set(expected.reason, (expectedErrors.get(expected.reason) ?? 0) + 1);
-      return;
-    }
     // Carry where it came from. A message on its own says what broke; the
     // source says whose it was, which is the difference between blaming a
     // plugin and blaming the run. For code eval'd under a `sourceURL` that
     // is the plugin itself, and for a Content Security Policy refusal it is
-    // the only clue the message has. Past the cap the message is counted
+    // the only clue the message has. The expected list matches the same
+    // text that gets stored — source suffix included — so an entry can
+    // name a browser line by the URL it failed on without swallowing every
+    // message that shares its wording. Past the cap the message is counted
     // instead of stored — see MAX_RENDERER_ERRORS.
+    const text = withSource(message, sourceId);
+    const expected = EXPECTED_ERRORS.find((entry) => entry.match.test(text));
+    if (expected) {
+      expectedErrors.set(expected.reason, (expectedErrors.get(expected.reason) ?? 0) + 1);
+      return;
+    }
     if (rendererErrors.length >= MAX_RENDERER_ERRORS) {
       rendererErrorsDropped += 1;
       return;
     }
-    rendererErrors.push(withSource(message, sourceId));
+    rendererErrors.push(text);
   };
 
   const useFallbackCapture = (): SmokeCapture => {
