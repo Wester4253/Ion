@@ -3,6 +3,25 @@
 Format: question, why it matters, options, recommended default. Work continues
 on everything unblocked; only truly blocking items stop the run.
 
+## Q8: USRBG connect-src CSP grant for usrbg.is-hardly.online
+
+- **Question**: USRBG's core function is fetching backgrounds from
+  `usrbg.is-hardly.online`, which Discord's `connect-src` CSP refuses; Ion's
+  shell grants hosts in `packages/shell-desktop/src/main/csp.ts` only per
+  measured need. Should that host (connect-src) join the grant table?
+- **Why it matters**: without the grant USRBG can never work in Ion — its
+  start rejects and it scores a Tier 2 fail with a diagnosis. With the grant
+  it likely passes, but every fetch exposes the user's IP to that
+  third-party service, so this is a privacy call, not just a compat fix.
+- **Options**:
+  1. (a) Grant `usrbg.is-hardly.online` connect-src, recorded in the table
+     and in `docs/architecture.md` like the other grants.
+  2. (b) Leave it blocked; USRBG stays failing-with-diagnosis (service
+     unreachable under Discord's CSP).
+- **Recommended default**: (b) until you say otherwise — the conservative
+  posture for third-party services is to stay blocked.
+- **Status**: open; USRBG measured failing with a diagnosis in the meantime.
+
 ## Q1: Phases 7 and 8 are not defined in docs
 
 - **Question**: `docs/status.md` and `docs/architecture.md` do not define

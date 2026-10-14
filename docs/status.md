@@ -81,6 +81,35 @@ against a live session. The GitHub Actions workflow
 publishes to an `ion-index/vencord/<version>` release — **written but not run
 here; its first real execution is untested.**
 
+## Phase 10 — Vencord/Equicord bulk acceptance (180 plugins, in progress)
+
+**What runs.** The acceptance set grew from the 32-plugin starter set to all
+180 plugins upstream's own build rules ship (`packages/compat-vencord/
+acceptance.json`; `group: "bulk"` entries appended by the generator, hand-
+written A–D entries untouched). Debugging the bulk run exposed and fixed four
+root causes, each with a regression test:
+
+| Root cause                                                                                                                                                                                                                                                                                                               | Fix                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| react-aria's defaulting context proxy answered every property, so upstream's own `waitFor(["dispatch", "subscribe"])` delivered it as `FluxDispatcher` on the logged-out page (it executes before the real dispatcher) and poisoned every flux plugin, silently — the listener's throw was swallowed by the getter guard | `filters.byProps` now requires a real property descriptor (own or prototype chain); `waitFor` logs listener throws instead of swallowing them (`packages/core/src/webpack/`)                              |
+| Every nested scan descended into the global-object module (`window` itself), reading side-effecting page getters and re-matching poisoned values                                                                                                                                                                         | nested scans skip the global object's exports; throwing filters are a miss, not a failed search                                                                                                           |
+| The shim settled `onceReady` at discovery time, so `consoleShortcuts` eager-loaded component lazies on the login page (17 unattributed "could not find the X Component" errors)                                                                                                                                          | `onceReady` settles only on gateway `CONNECTION_OPEN`, exactly like upstream                                                                                                                              |
+| An async `start()` rejection surfaced as an anonymous unhandled rejection                                                                                                                                                                                                                                                | the adapter logs it under the plugin's name (upstream's started semantics untouched); the smoke captures full console text plus stacks over CDP instead of the 160-char-truncated `console-message` event |
+
+**Measured result** (fresh isolated profile, no login, all 180 enabled, 10 s
+fix-verification settle — **not** a Tier 2 soak; the 180 s measurement run is
+still pending): 181/181 registered, 178 started, 3 start failures, 5
+attributed async-start rejections, 0 unattributed renderer errors
+(`runHealthy: true`). Scoreboard at [`compat.md`](./compat.md): 170 pass, 1
+warnings (CommandsAPI's own init-ordering notice), 8 fail, 1 deferred. Every
+failure carries a one-line `diagnosis` in `acceptance.json`: 3 force modules
+the logged-out page never loads (UserSettings catalog, API Endpoints,
+WindowStore), 3 race modules that load later (FluxDispatcher,
+SelectedGuildStore, Notices store), and 2 need absent external apps (arRPC bridge on :1337,
+XSOverlay on :42070); USRBG's service fetch is refused by Discord's
+`connect-src` CSP, whose grant is an owner decision (Q8). Tier 3 (owner,
+logged-in, 150 items) is unchanged.
+
 ## Phase 7 — BetterDiscord adapter
 
 **What runs.** `packages/compat-bd` ports the `BdApi` surface BetterDiscord

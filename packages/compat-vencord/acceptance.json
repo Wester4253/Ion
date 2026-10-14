@@ -251,6 +251,7 @@
     "group": "bulk",
     "folder": "arRPC.web",
     "name": "WebRichPresence (arRPC)",
+    "diagnosis": "async start() reads the Notices store before it loads logged-out, and needs the local arRPC bridge app on port 1337; Tier 3 logged-in with the bridge running.",
     "tier3": "Confirm by hand: Client plugin for arRPC to enable RPC on Discord Web (experimental)"
   },
   {
@@ -269,6 +270,7 @@
     "group": "bulk",
     "folder": "betterRoleContext",
     "name": "BetterRoleContext",
+    "diagnosis": "start() forces the UserSettings catalog module, which the logged-out page never loads; Tier 3 on a logged-in client.",
     "tier3": "Confirm by hand: Adds options to copy role color / edit role / view role icon when right clicking roles in the user profile or in the member list"
   },
   {
@@ -389,6 +391,7 @@
     "group": "bulk",
     "folder": "customRPC",
     "name": "CustomRPC",
+    "diagnosis": "async start() dispatches through FluxDispatcher before the dispatcher module loads logged-out; Tier 3 on a logged-in client.",
     "tier3": "Confirm by hand: Add a fully customisable Rich Presence (Game status) to your Discord profile"
   },
   {
@@ -533,6 +536,7 @@
     "group": "bulk",
     "folder": "implicitRelationships",
     "name": "ImplicitRelationships",
+    "diagnosis": "start() reads the API Endpoints module through Constants, absent on the logged-out page; Tier 3 on a logged-in client.",
     "tier3": "Confirm by hand: Shows your implicit relationships in the Friends tab."
   },
   {
@@ -545,6 +549,7 @@
     "group": "bulk",
     "folder": "keepCurrentChannel",
     "name": "KeepCurrentChannel",
+    "diagnosis": "async start() reads SelectedGuildStore before Discord loads it in the logged-out harness; Tier 3 on a logged-in client.",
     "tier3": "Confirm by hand: Attempt to navigate to the channel you were in before switching accounts or loading Discord."
   },
   {
@@ -569,6 +574,7 @@
     "group": "bulk",
     "folder": "messageClickActions",
     "name": "MessageClickActions",
+    "diagnosis": "start() reads WindowStore before Discord loads it in the logged-out harness; Tier 3 on a logged-in client.",
     "tier3": "Confirm by hand: Hold Backspace and click to delete, double click to edit/reply"
   },
   {
@@ -1007,6 +1013,7 @@
     "group": "bulk",
     "folder": "usrbg",
     "name": "USRBG",
+    "diagnosis": "async start() fetches its service, which Discord's connect-src CSP refuses (no grant); backgrounds unavailable unless the owner grants the host.",
     "tier3": "Confirm by hand: Displays user banners from USRBG, allowing anyone to get a banner without Nitro"
   },
   {
@@ -1073,6 +1080,7 @@
     "group": "bulk",
     "folder": "xsOverlay",
     "name": "XSOverlay",
+    "diagnosis": "async start() needs the XSOverlay helper app listening on 127.0.0.1:42070, absent on the test machine; Tier 3 with the app running.",
     "tier3": "Confirm by hand: Forwards discord notifications to XSOverlay, for easy viewing in VR"
   },
   {
