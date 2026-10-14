@@ -70,20 +70,31 @@ const VIRTUAL = new Set(["~plugins", "~git-hash", "~git-remote"]);
 const LICENSES = ["LICENSE", "packages/discord-types/LICENSE"];
 
 function resolveFile(base) {
+  // `./style.css?managed` and friends: the query is a build-mode marker
+  // (upstream's stylePlugin strips it), never part of the file name.
+  const clean = base.split("?")[0];
   const candidates = [
-    base,
-    `${base}.ts`,
-    `${base}.tsx`,
-    `${base}.web.ts`,
-    `${base}.web.tsx`,
-    `${base}.desktop.ts`,
-    `${base}.desktop.tsx`,
-    `${base}.vesktop.ts`,
-    `${base}.vesktop.tsx`,
-    `${base}.d.ts`,
-    join(base, "index.ts"),
-    join(base, "index.tsx"),
-    join(base, "index.d.ts"),
+    clean,
+    `${clean}.ts`,
+    `${clean}.tsx`,
+    `${clean}.web.ts`,
+    `${clean}.web.tsx`,
+    `${clean}.desktop.ts`,
+    `${clean}.desktop.tsx`,
+    `${clean}.vesktop.ts`,
+    `${clean}.vesktop.tsx`,
+    `${clean}.d.ts`,
+    // ESM-style specifiers (`@utils/constants.js`) name their TS source.
+    ...(clean.endsWith(".js")
+      ? [
+          clean.slice(0, -".js".length),
+          `${clean.slice(0, -".js".length)}.ts`,
+          `${clean.slice(0, -".js".length)}.tsx`,
+        ]
+      : []),
+    join(clean, "index.ts"),
+    join(clean, "index.tsx"),
+    join(clean, "index.d.ts"),
   ];
   for (const candidate of candidates) {
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
@@ -155,6 +166,14 @@ export function computeClosure(upstreamRoot, entryFiles) {
           continue;
         }
         target = resolveFile(aliased);
+      } else if (spec.startsWith("file://")) {
+        // Raw-text imports (upstream's fileUriPlugin): the file joins the
+        // closure as data — the build reads it verbatim — so it is copied
+        // but never walked for imports of its own.
+        const raw = resolve(dirname(file), spec.slice("file://".length).split("?")[0]);
+        if (existsSync(raw) && statSync(raw).isFile()) files.add(raw);
+        else unresolved.add(`${spec} (from ${relative(upstreamRoot, file)})`);
+        continue;
       } else {
         externals.add(spec);
         continue;
