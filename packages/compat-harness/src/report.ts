@@ -98,6 +98,8 @@ export interface SmokeReport {
     readonly names?: Record<string, string>;
   } | null;
   readonly rendererErrors?: readonly string[];
+  /** Renderer errors the capture hit its cap on (see the shell's cap). */
+  readonly rendererErrorsDropped?: number;
   readonly expectedErrors?: Record<string, number>;
   readonly warnings?: readonly string[];
   readonly patchStats?: Record<string, PluginPatchStats> | null;
@@ -237,9 +239,12 @@ function isAttributedTo(message: string, name: string, origin?: string): boolean
     // …or the message says where it came from. Stronger than any phrasing:
     // an error raised under a plugin's own `sourceURL` could not have been
     // produced anywhere else, and a Content Security Policy refusal often
-    // carries nothing but this. Matched as the whole bracketed marker, not a
-    // bare substring: `s://!SHELTER/a` is a prefix of `s://!SHELTER/a-2`.
-    (origin !== undefined && text.includes(`[source: ${origin}]`))
+    // carries nothing but this. Matched as the whole bracketed marker, or as
+    // a stack frame (`(s://!SHELTER/a:192:22)` — a rejection re-reported
+    // under the document's URL keeps its origin only in the stack), not as a
+    // bare substring: `s://!SHELTER/a` is a prefix of `s://!SHELTER/a-2`, and
+    // a frame always ends the folder in `:` before its line number.
+    (origin !== undefined && (text.includes(`[source: ${origin}]`) || text.includes(`${origin}:`)))
   );
 }
 
@@ -309,6 +314,15 @@ export function analyze(
       rest = leftover;
     }
     unattributedRendererErrors.push(...rest);
+  }
+  // Messages the capture had to drop at its cap arrive here. Nobody can be
+  // blamed for a message that was never seen, so each drop keeps the run
+  // unhealthy — the fix is a higher cap or fewer errors, never a quieter one.
+  const dropped = smoke.rendererErrorsDropped ?? 0;
+  for (let i = 0; i < dropped; i += 1) {
+    unattributedRendererErrors.push(
+      `renderer error ${String(i + 1)} of ${String(dropped)} was dropped by the capture cap — its message was never seen`,
+    );
   }
 
   let unattributedWarnings = [...warnings];

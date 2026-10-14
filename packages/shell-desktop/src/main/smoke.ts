@@ -48,6 +48,17 @@ function withSource(message: string, sourceId: string): string {
 const MAX_WARNINGS = maxWarnings();
 
 /**
+ * Ceiling on stored renderer errors. The capture is unbounded in memory
+ * until this point, and a runaway `console.error` loop in the page could
+ * otherwise grow the report without end over a three-minute soak — but a
+ * dropped error must never disappear silently, so drops are counted and the
+ * report carries the count; the harness treats any drop as unattributed
+ * (nobody can be blamed for a message that was never seen), which keeps the
+ * run unhealthy until the cap is raised.
+ */
+const MAX_RENDERER_ERRORS = 1000;
+
+/**
  * Console errors that occur by design in a healthy run, each with the
  * reason it is expected. Everything else lands in `rendererErrors` and
  * fails the run — this list must stay tiny and reviewable.
@@ -88,7 +99,7 @@ const EXPECTED_ERRORS: readonly { readonly match: RegExp; readonly reason: strin
     // app is not installed on the machine under test, so the connection
     // is refused and the plugin logs its own attributed rejection beside it.
     match: /WebSocket connection to 'ws:\/\/127\.0\.0\.1:1337\/' failed/,
-    reason: "WebRichPresence (arRPC) needs the local arRPC bridge on port 1337",
+    reason: "The local arRPC bridge on 127.0.0.1:1337 is not running on the machine under test",
   },
   {
     // XSOverlay opens its helper-app socket at start; the XSOverlay app is
@@ -96,6 +107,23 @@ const EXPECTED_ERRORS: readonly { readonly match: RegExp; readonly reason: strin
     // refused and the plugin logs its own attributed rejection beside it.
     match: /WebSocket connection to 'ws:\/\/127\.0\.0\.1:42070\/\?client=Vencord' failed/,
     reason: "XSOverlay needs the XSOverlay app listening on 127.0.0.1:42070",
+  },
+  {
+    // DiscordFeed injects JetBrains Mono as a stylesheet; Discord's
+    // style-src does not list Google Fonts and the shell grants nothing
+    // Google. The refusal is browser-level and non-fatal — the plugin runs
+    // and only the font substitution is lost — so it is recorded as an
+    // expected environment refusal rather than pinned on the plugin.
+    match: /fonts\.googleapis\.com\/css2\?family=JetBrains\+Mono/,
+    reason: "DiscordFeed's JetBrains Mono stylesheet is refused by Discord's style-src CSP",
+  },
+  {
+    // toki pona taso loads the ijo font from rawcdn.githack.com, which
+    // Discord's font-src does not list. The same plugin is separately
+    // reported (and fails) for its Pyodide script, which stays attributed —
+    // only this browser-level refusal carries no plugin marker.
+    match: /rawcdn\.githack\.com\/lipu-linku\/ijo/,
+    reason: "toki pona taso's ijo font is refused by Discord's font-src CSP",
   },
   {
     // relationshipNotifier's start() fires syncAndRunChecks() without
@@ -121,6 +149,8 @@ export interface SmokeCapture {
   readonly rendererErrors: string[];
   readonly expectedErrors: Map<string, number>;
   readonly warnings: Set<string>;
+  /** Renderer errors dropped at the capture cap — zero in any healthy run. */
+  dropped(): number;
   detach(): void;
 }
 
@@ -177,6 +207,7 @@ export function attachSmokeCapture(win: BrowserWindow): SmokeCapture {
   // Console errors that are by design of the bundled software are counted
   // separately — that list stays tiny and every entry carries its reason.
   const rendererErrors: string[] = [];
+  let rendererErrorsDropped = 0;
   const expectedErrors = new Map<string, number>();
   const warnings = new Set<string>();
 
@@ -195,7 +226,12 @@ export function attachSmokeCapture(win: BrowserWindow): SmokeCapture {
     // source says whose it was, which is the difference between blaming a
     // plugin and blaming the run. For code eval'd under a `sourceURL` that
     // is the plugin itself, and for a Content Security Policy refusal it is
-    // the only clue the message has.
+    // the only clue the message has. Past the cap the message is counted
+    // instead of stored — see MAX_RENDERER_ERRORS.
+    if (rendererErrors.length >= MAX_RENDERER_ERRORS) {
+      rendererErrorsDropped += 1;
+      return;
+    }
     rendererErrors.push(withSource(message, sourceId));
   };
 
@@ -204,7 +240,13 @@ export function attachSmokeCapture(win: BrowserWindow): SmokeCapture {
       if (details.level === "warning") record("warning", details.message, details.sourceId);
       else if (details.level === "error") record("error", details.message, details.sourceId);
     });
-    return { rendererErrors, expectedErrors, warnings, detach: () => undefined };
+    return {
+      rendererErrors,
+      expectedErrors,
+      warnings,
+      dropped: () => rendererErrorsDropped,
+      detach: () => undefined,
+    };
   };
 
   // Attaching to a documentless target throws, and enabling a domain on
@@ -275,7 +317,13 @@ export function attachSmokeCapture(win: BrowserWindow): SmokeCapture {
       }
     })();
   });
-  return { rendererErrors, expectedErrors, warnings, detach };
+  return {
+    rendererErrors,
+    expectedErrors,
+    warnings,
+    dropped: () => rendererErrorsDropped,
+    detach,
+  };
 }
 
 export function runSmoke(
@@ -405,7 +453,9 @@ export function runSmoke(
       await delay(400);
     }
     report["ionPanelTimeline"] = ionPanelTimeline;
-    report["rendererErrors"] = rendererErrors.slice(0, 20);
+    report["rendererErrors"] = rendererErrors;
+    const dropped = capture.dropped();
+    if (dropped > 0) report["rendererErrorsDropped"] = dropped;
     report["expectedErrors"] = Object.fromEntries(expectedErrors);
     report["warnings"] = [...warnings];
     report["patchStats"] = await probe("window.__ION__?.patches?.stats?.() ?? null");

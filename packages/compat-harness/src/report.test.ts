@@ -237,11 +237,57 @@ describe("analyze", () => {
     expect(report.runHealthy).toBe(true);
   });
 
+  test("attributes an error by its stack frame when the source is the document", () => {
+    // A promise created in a plugin's file but rejected (and reported) under
+    // the document URL keeps the plugin only in its stack trace:
+    //   … at load (s://!SHELTER/dorion-updater:192:22) [source: https://…]
+    const swept: readonly AcceptanceEntry[] = [
+      { group: "bulk", name: "Updater", id: "shelter.updater", url: "https://example.com/a/" },
+      { group: "bulk", name: "Updater 2", id: "shelter.updater-2", url: "https://example.com/b/" },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 2, started: 2, failed: 0 },
+          ids: ["shelter.updater:started", "shelter.updater-2:started"],
+          failures: [],
+        },
+        rendererErrors: [
+          'Uncaught (in promise) SyntaxError: "undefined" is not valid JSON at load ' +
+            "(s://!SHELTER/updater:192:22) [source: https://discord.com/app]",
+        ],
+      },
+      swept,
+      { ...OPTIONS, ecosystem: "shelter", upstream: "live index" },
+    );
+
+    expect(plugin(report, "Updater").reason).toContain("not valid JSON");
+    // The frame names the whole folder before its `:line`, so a folder that
+    // extends another folder's name never matches the shorter origin.
+    expect(plugin(report, "Updater 2").status).toBe("pass");
+    expect(report.run.unattributedRendererErrors).toEqual([]);
+    expect(report.runHealthy).toBe(true);
+  });
+
   test("unattributed renderer errors fail the run, not a random plugin", () => {
     const report = analyze({ ...OK, rendererErrors: ["TypeError: ???"] }, ACCEPTANCE, OPTIONS);
     expect(report.summary.fail).toBe(0);
     expect(report.runHealthy).toBe(false);
     expect(report.run.unattributedRendererErrors).toEqual(["TypeError: ???"]);
+  });
+
+  test("a renderer error the capture dropped keeps the run unhealthy", () => {
+    // Dropped means the message was never seen: no plugin can be blamed and
+    // no expected-errors entry can match it, so the run cannot pass.
+    const report = analyze(
+      { ...OK, rendererErrors: [], rendererErrorsDropped: 2 },
+      ACCEPTANCE,
+      OPTIONS,
+    );
+    expect(report.runHealthy).toBe(false);
+    expect(report.run.unattributedRendererErrors).toHaveLength(2);
+    expect(report.run.unattributedRendererErrors[0]).toContain("capture cap");
   });
 
   test("reports by-design expected errors as evidence, not failures", () => {
