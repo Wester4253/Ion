@@ -126,6 +126,18 @@ const EXPECTED_ERRORS: readonly { readonly match: RegExp; readonly reason: strin
     reason: "toki pona taso's ijo font is refused by Discord's font-src CSP",
   },
   {
+    // Snazzy Shelter fetches every repo in the Cumcord themes list at
+    // start; some of those files are gone upstream. The browser's resource
+    // line names the dead URL, not the plugin — the paired thrown error in
+    // the same run ("CC manifest … status 404", stack
+    // `s://!SHELTER/snazzy-shelter:111`) is what ties the pair together,
+    // and that one stays attributed so the plugin's verdict never softens.
+    match:
+      /Failed to load resource: the server responded with a status of 404 \(\) \[source: https:\/\/raw\.githubusercontent\.com/,
+    reason:
+      "A theme list fetched a file GitHub no longer serves (404); this run's pair was Snazzy Shelter's Cumcord repo sweep",
+  },
+  {
     // relationshipNotifier's start() fires syncAndRunChecks() without
     // awaiting it (vendor code, verbatim); where UserStore's module has
     // not loaded, the async body rejects and no plugin name survives into
