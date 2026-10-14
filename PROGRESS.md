@@ -155,21 +155,19 @@ Live log for the phase-6-8 run. Updated at every commit/milestone.
 
 - Phase 10 complete: Vencord bulk acceptance **170 pass / 1 warnings / 8 fail / 1 deferred**, `runHealthy: true`, tier 1 177/3, tier 2 172/8; every failure carries a diagnosis in `acceptance.json`. Generated scoreboard: `docs/compat.md`.
 
-- **Phase 7 BD bulk unblocked**: live store (~216 plugins) now boots in ~3 min (was hung at 100-150 plugins). Root cause: O(n²) module search in Ion's `waitFor` probe — every late Discord module rescanned the full cache for every pending waiter. v8 profiler showed 81.7% self-time in `everyModule`. Fix (`188677b`): core `waitFor` now threads module `id` into the predicate; compat-bd's probe indexes each late module on arrival — O(1) lookup, no rescan. The index sweep is soaking (180 s Tier 2); scoreboard will be generated at completion. Starter set already measured: 7/0/3.
+- **Phase 7 BD bulk measured**: live store (216 plugins) now boots in ~3 min (was hung at 100-150 plugins). Root cause: O(n²) module search in Ion's `waitFor` probe — every late Discord module rescanned the full cache for every pending waiter. v8 profiler showed 81.7% self-time in `everyModule`. Fix (`188677b`): core `waitFor` now threads module `id` into the predicate; compat-bd's probe indexes each late module on arrival — O(1) lookup, no rescan. **Bulk result: 88 pass / 5 warnings / 123 fail / 0 deferred** (180 s Tier 2, logged-out). 52 failures need a signed-in session (Discord modules absent); the rest are by-design (no Node in page), CSP grants awaiting owner (Q8/Q9), or Discord-internal modules. The starter set (7/0/3) is the honest measurable scope until a test account is available. Every failure carries a one-line diagnosis in `bd-diagnoses.ts`. Generated scoreboard: `docs/compat-bd-index.md`.
 
 - Attribution fixes for BD: plugin file origin (`betterdiscord://.../file.plugin.js`) and declared `@source` URL now credit errors (CSP media-src refusals, stack frames under the document) that previously landed in the unattributed bucket.
 
 ## In progress
 
-- BD index sweep (running — expected finish shortly).
-- Owner Tier 3 hand-checks across all scoreboards (Vencord 150 items, BD, Shelter, stage-3 settings) and the open questions Q1–Q9 in `QUESTIONS.md`.
+- Owner Tier 3 hand-checks across all scoreboards (Vencord 150 items, BD, Shelter, stage-3 settings) and the open questions in `HUMAN/`.
 
 ## Next (dependency order)
 
-1. BD index sweep result → generated `docs/compat-bd-index.md`.
-2. Owner Tier 3 and Q1–Q9 decisions.
-3. First real run of `.github/workflows/vencord-plugins.yml` on GitHub (cannot be executed in this environment — owner-visible in the report).
+1. Owner Tier 3 and `HUMAN/` decisions.
+2. First real run of `.github/workflows/vencord-plugins.yml` on GitHub (cannot be executed in this environment — owner-visible in the report).
 
 ## Resume point
 
-- Branch `phase-6-8`, tree clean and green (typecheck, lint, 737+ tests); latest measurements are Phase 10, Phase 8 scoreboards, and the BD sweep running. Everything since `ebd3115` is unpushed — the push happens at the phase milestone, never to `main`.
+- Branch `phase-6-8`, tree clean and green (typecheck, lint, 746 tests); all three ecosystem bulk sweeps measured and documented. Everything since `ebd3115` is unpushed — the push happens at the phase milestone, never to `main`.
