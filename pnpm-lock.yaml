@@ -82,7 +82,11 @@ importers:
         specifier: workspace:*
         version: link:../core
 
-  packages/compat-harness: {}
+  packages/compat-harness:
+    dependencies:
+      '@ion/compat-bd':
+        specifier: workspace:*
+        version: link:../compat-bd
 
   packages/compat-shelter:
     dependencies:

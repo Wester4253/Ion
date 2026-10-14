@@ -50,6 +50,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readAddonMeta } from "@ion/compat-bd/meta";
+
+import { BD_INDEX_DIAGNOSES } from "./bd-diagnoses";
+import { bdHeaders, parseBdListing, type BdListingCard } from "./bd-listing";
 import { renderCompatMarkdown } from "./markdown";
 import { analyze, type AcceptanceEntry, type Ecosystem, type SmokeReport } from "./report";
 import { SHELTER_INDEX_DIAGNOSES } from "./shelter-diagnoses";
@@ -169,10 +173,14 @@ function parseArgs(argv: readonly string[]): CliOptions | null {
   if (!isSource(sourceRaw)) {
     throw new Error(`unknown --source: ${sourceRaw} (expected ${SOURCES.join(", ")})`);
   }
-  if (sourceRaw === "index" && ecosystem !== "shelter") {
+  // Only these two ecosystems have a catalog the harness knows how to
+  // fetch (see stageBdIndex / stageShelterIndex); a starter set is a
+  // checked-in file, not a live one.
+  const SWEEPABLE: ReadonlySet<Ecosystem> = new Set(["bd", "shelter"]);
+  if (sourceRaw === "index" && !SWEEPABLE.has(ecosystem)) {
     throw new Error(
       `--source index is not available for --ecosystem ${ecosystem} yet ` +
-        `(the harness can only sweep a catalog it knows how to fetch)`,
+        `(the harness can only sweep a catalog it knows to fetch: ${[...SWEEPABLE].join(", ")})`,
     );
   }
   const source: PluginSource = sourceRaw;
@@ -215,6 +223,15 @@ const USER_AGENT =
 
 /** The live Shelter plugin index: a list of author repos and their plugins. */
 const SHELTER_INDEX_URL = "https://shindex.uwu.network/data";
+
+/**
+ * The live BetterDiscord listing. Its JSON API (api.betterdiscord.app)
+ * was retired — every /v1/store path now redirects off-site — so the
+ * listing is the server-rendered page itself: Svelte SSR cards, each
+ * carrying its own `download?id=N` link.
+ */
+const BD_LISTING_URL = "https://betterdiscord.app/plugins";
+const BD_DOWNLOAD_BASE = "https://betterdiscord.app/download?id=";
 
 /**
  * Fetches `url` and checks it against `expected`. A non-2xx response or a
@@ -357,6 +374,136 @@ async function stageBdPlugins(
   // Provenance travels with the run artifacts: every staged file, its
   // pinned source, and the verified digest.
   await writeStaged(artifactsDir, "bd-staged.json", staged);
+}
+
+/**
+ * Fetches the live BetterDiscord listing and stages every plugin it names,
+ * measuring the store as its visitors see it. There is no pin to verify
+ * against — the digest recorded is the one the download actually had, the
+ * same provenance rule the Shelter index sweep runs under.
+ */
+async function stageBdIndex(profileDir: string, artifactsDir: string): Promise<AcceptanceEntry[]> {
+  let listingBytes: Buffer;
+  try {
+    const response = await fetch(BD_LISTING_URL, { headers: bdHeaders() });
+    if (!response.ok) {
+      throw new Error(`the BetterDiscord listing answered HTTP ${String(response.status)}`);
+    }
+    listingBytes = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    throw new Error(`the BetterDiscord listing did not answer: ${message(error)}`);
+  }
+
+  const seen = new Set<string>();
+  const cards: BdListingCard[] = [];
+  for (const card of parseBdListing(listingBytes.toString("utf8"))) {
+    if (seen.has(card.downloadId)) continue;
+    seen.add(card.downloadId);
+    cards.push(card);
+  }
+  // A sweep that parsed nothing is a page-shape change, not a measurement.
+  if (cards.length === 0) {
+    throw new Error("the BetterDiscord listing parsed to no cards — the page shape changed");
+  }
+
+  const pluginsDir = resolve(profileDir, "ion", "bd", "plugins");
+  const staged: StagedFile[] = [];
+  const entries: AcceptanceEntry[] = [];
+
+  for (const card of cards) {
+    const url = `${BD_DOWNLOAD_BASE}${card.downloadId}`;
+    let bytes: Buffer;
+    let servedName: string | undefined;
+    try {
+      // betterdiscord.app rate-limits the download path (HTTP 429 after a
+      // burst, observed 2026-10-14): a throttled response is retried with
+      // backoff, and only a final refusal or a missing file marks the
+      // entry unstaged. The loop stays sequential — parallel bursts are
+      // what earns the 429 in the first place.
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 5000 * attempt));
+        }
+        try {
+          response = await fetch(url, { headers: bdHeaders() });
+        } catch {
+          response = null;
+        }
+        if (
+          response !== null &&
+          (response.ok || (response.status !== 429 && response.status < 500))
+        ) {
+          break;
+        }
+        response = null;
+      }
+      if (!response?.ok) {
+        entries.push({
+          group: "bulk",
+          name: card.title,
+          id: `bd.${card.slug.replace(/\s+/g, "_")}`,
+          url,
+          unstaged: `not staged: the download ${response == null ? "kept failing after retries" : `answered HTTP ${String(response.status)}`}`,
+        });
+        continue;
+      }
+      bytes = Buffer.from(await response.arrayBuffer());
+      const disposition = response.headers.get("content-disposition");
+      servedName = /filename="([^"]+)"/.exec(disposition ?? "")?.[1];
+    } catch (error) {
+      entries.push({
+        group: "bulk",
+        name: card.title,
+        id: `bd.${card.slug.replace(/\s+/g, "_")}`,
+        url,
+        unstaged: `not staged: the download failed (${message(error)})`,
+      });
+      continue;
+    }
+
+    // The adapter loads files by the `*.plugin.js` convention and keys the
+    // plugin's identity by its meta `@name` — the same two rules, in the
+    // same order, that `readAddonMeta` and `bdAddonIdFor` apply. The row and
+    // the console label it attributes must agree, or a plugin's own warnings
+    // land in the run's unattributed bucket instead of on its row.
+    const filename =
+      servedName?.endsWith(".plugin.js") === true ? servedName : `${card.slug}.plugin.js`;
+    const meta = readAddonMeta(filename, bytes.toString("utf8"));
+    const name = meta.ok ? meta.meta.name : card.title;
+    const entryId = `bd.${name.replace(/\s+/g, "_")}`;
+
+    await stageFile(resolve(pluginsDir, filename), bytes);
+    staged.push({
+      name,
+      url,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      file: filename,
+    });
+    entries.push({
+      group: "bulk",
+      name,
+      id: entryId,
+      url,
+      ...(meta.ok ? {} : { note: `meta not parsed: ${meta.reason}` }),
+      ...(BD_INDEX_DIAGNOSES[entryId] ? { diagnosis: BD_INDEX_DIAGNOSES[entryId] } : {}),
+    });
+  }
+
+  const resolved = resolveSweepNames(entries);
+  const stagedCount = resolved.filter((entry) => entry.unstaged === undefined).length;
+  if (stagedCount === 0) {
+    throw new Error(
+      `the BetterDiscord index sweep staged nothing (${String(resolved.length)} entries; ` +
+        `first reason: ${resolved[0]?.unstaged ?? "unknown"})`,
+    );
+  }
+
+  await writeStaged(artifactsDir, "bd-index-staged.json", staged);
+  // Doubles as the entry list for `--report`, so a sweep can be re-analyzed
+  // without re-fetching the catalog.
+  await writeStaged(artifactsDir, "bd-index.json", resolved);
+  return resolved;
 }
 
 /**
@@ -639,7 +786,8 @@ async function main(): Promise<void> {
     // wrote — re-fetching the catalog would score today's listing against
     // yesterday's results.
     if (options.reportOnly !== null) {
-      const entriesPath = resolve(dirname(dirname(options.reportOnly)), "shelter-index.json");
+      const entriesName = `${isBd ? "bd" : "shelter"}-index.json`;
+      const entriesPath = resolve(dirname(dirname(options.reportOnly)), entriesName);
       acceptance = JSON.parse(await readFile(entriesPath, "utf8")) as AcceptanceEntry[];
     }
   } else {
@@ -658,7 +806,7 @@ async function main(): Promise<void> {
 
   let upstream: string;
   if (usesIndex) {
-    upstream = `live index ${SHELTER_INDEX_URL}`;
+    upstream = `live index ${isBd ? BD_LISTING_URL : SHELTER_INDEX_URL}`;
   } else if (isBd) {
     upstream = "133bc83 (Apache-2.0 port of BdApi)";
   } else if (isShelter) {
@@ -697,7 +845,7 @@ async function main(): Promise<void> {
           options.profile ?? (await mkdtemp(join(tmpdir(), `ion-${options.ecosystem}-profile-`)));
         profile = { dir, owned: options.profile === null };
         if (usesIndex) {
-          acceptance = await stageShelterIndex(dir, out);
+          acceptance = isBd ? await stageBdIndex(dir, out) : await stageShelterIndex(dir, out);
         } else if (isBd) {
           await stageBdPlugins(dir, acceptance, out);
         } else {
