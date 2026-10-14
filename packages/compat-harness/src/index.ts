@@ -485,6 +485,8 @@ async function stageBdIndex(profileDir: string, artifactsDir: string): Promise<A
       name,
       id: entryId,
       url,
+      file: filename,
+      ...(meta.ok && meta.meta.source !== undefined ? { source: meta.meta.source } : {}),
       ...(meta.ok ? {} : { note: `meta not parsed: ${meta.reason}` }),
       ...(BD_INDEX_DIAGNOSES[entryId] ? { diagnosis: BD_INDEX_DIAGNOSES[entryId] } : {}),
     });

@@ -270,6 +270,89 @@ describe("analyze", () => {
     expect(report.runHealthy).toBe(true);
   });
 
+  test("attributes a BetterDiscord error by the evaluated file, not only by a label", () => {
+    // A plugin that never prints its own name is still accountable for
+    // errors raised inside its own file — the adapter evaluates it under
+    // `betterdiscord://betterdiscord/plugins/<file>`, and a rejection
+    // re-reported under the document keeps the file only in its stack.
+    const swept: readonly AcceptanceEntry[] = [
+      { group: "bulk", name: "Quiet", id: "bd.Quiet", url: "https://example.com/q/" },
+      {
+        group: "bulk",
+        name: "ToDo",
+        id: "bd.ToDo",
+        url: "https://example.com/t/",
+        file: "ToDoList.plugin.js",
+      },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 2, started: 2, failed: 0 },
+          ids: ["bd.Quiet:started", "bd.ToDo:started"],
+          failures: [],
+        },
+        rendererErrors: [
+          "Uncaught TypeError: Cannot read properties of undefined (reading 'tree') " +
+            "at MutationObserver.eval (betterdiscord://betterdiscord/plugins/ToDoList.plugin.js:160:5)",
+        ],
+      },
+      swept,
+      { ...OPTIONS, ecosystem: "bd", upstream: "live index" },
+    );
+
+    expect(plugin(report, "ToDo").reason).toContain("'tree'");
+    expect(plugin(report, "Quiet").status).toBe("pass");
+    expect(report.run.unattributedRendererErrors).toEqual([]);
+    expect(report.runHealthy).toBe(true);
+  });
+
+  test("attributes a resource refusal to the plugin whose declared source hosts it", () => {
+    // A media-src refusal names the file it refused and nothing else. The
+    // plugin's own `@source` — the repo serving that file — is the only
+    // identity the message speaks; a different plugin declaring another
+    // repo on the same host must not be credited.
+    const swept: readonly AcceptanceEntry[] = [
+      {
+        group: "bulk",
+        name: "TypingSounds",
+        id: "bd.TypingSounds",
+        url: "https://example.com/ts/",
+        source: "https://github.com/Slluxx/BetterDiscord-Extended-Typing-Sounds",
+      },
+      {
+        group: "bulk",
+        name: "Other",
+        id: "bd.Other",
+        url: "https://example.com/o/",
+        source: "https://github.com/someone-else/other-plugin",
+      },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 2, started: 2, failed: 0 },
+          ids: ["bd.TypingSounds:started", "bd.Other:started"],
+          failures: [],
+        },
+        rendererErrors: [
+          "Loading media from 'https://github.com/Slluxx/BetterDiscord-Extended-Typing-Sounds" +
+            "/raw/refs/heads/main/sounds/cherrymx-blue-abs/sound.ogg' violates " +
+            "the following Content Security Policy directive: \"media-src 'self'\"",
+        ],
+      },
+      swept,
+      { ...OPTIONS, ecosystem: "bd", upstream: "live index" },
+    );
+
+    expect(plugin(report, "TypingSounds").reason).toContain("Loading media");
+    expect(plugin(report, "Other").status).toBe("pass");
+    expect(report.run.unattributedRendererErrors).toEqual([]);
+    expect(report.runHealthy).toBe(true);
+  });
+
   test("unattributed renderer errors fail the run, not a random plugin", () => {
     const report = analyze({ ...OK, rendererErrors: ["TypeError: ???"] }, ACCEPTANCE, OPTIONS);
     expect(report.summary.fail).toBe(0);

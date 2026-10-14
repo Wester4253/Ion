@@ -47,6 +47,21 @@ export interface AcceptanceEntry {
    * file; Shelter: the directory holding `plugin.js` and `plugin.json`).
    */
   readonly url?: string;
+  /**
+   * BetterDiscord only: the staged file name. The adapter evaluates the
+   * file under `betterdiscord://betterdiscord/plugins/<file>`, so this is
+   * the plugin's on-page evidence — errors raised inside it carry the path
+   * even when the plugin never prints its own name.
+   */
+  readonly file?: string;
+  /**
+   * The meta `@source` URL (BetterDiscord) or repo URL (Shelter) the plugin
+   * declares. A Content Security Policy refusal for a resource the plugin
+   * loads (a sound, an image host) quotes that resource's URL and nothing
+   * else — the declared source is often the only entry whose identity the
+   * URL speaks for.
+   */
+  readonly source?: string;
   /** sha256 of what gets staged — for Shelter, `plugin.js`. */
   readonly sha256?: string;
   /** Shelter only: sha256 of `plugin.json`, pinned beside the executable. */
@@ -213,13 +228,26 @@ function shelterOrigin(id: string | undefined): string | undefined {
     : undefined;
 }
 
+/**
+ * The path BetterDiscord evaluates a plugin file under, when the entry
+ * names one. Same evidence role as `shelterOrigin`: the adapter labels the
+ * file with a `sourceURL`, and the smoke capture carries it as `[source: …]`
+ * or a stack frame — so a plugin that never prints its own name is still
+ * accountable for errors raised inside its own code.
+ */
+function bdOrigin(file: string | undefined): string | undefined {
+  return file?.endsWith(".plugin.js") === true
+    ? `betterdiscord://betterdiscord/plugins/${file}`
+    : undefined;
+}
+
 /** Patterns that identify a message as belonging to `name`. */
 /** Escape a plugin name for use inside a RegExp (names carry parens). */
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function isAttributedTo(message: string, name: string, origin?: string): boolean {
+function isAttributedTo(message: string, name: string, origin?: string, source?: string): boolean {
   // BdApi's logger prints `%c[Name]%c` with console style arguments; if the
   // format specifiers survive into the captured text, drop them before
   // matching (a no-op for already-formatted messages).
@@ -244,7 +272,33 @@ function isAttributedTo(message: string, name: string, origin?: string): boolean
     // under the document's URL keeps its origin only in the stack), not as a
     // bare substring: `s://!SHELTER/a` is a prefix of `s://!SHELTER/a-2`, and
     // a frame always ends the folder in `:` before its line number.
-    (origin !== undefined && (text.includes(`[source: ${origin}]`) || text.includes(`${origin}:`)))
+    (origin !== undefined &&
+      (text.includes(`[source: ${origin}]`) || text.includes(`${origin}:`))) ||
+    // …or the message quotes a resource under the URL the plugin itself
+    // declares as its source. A media-src refusal names the file it refused
+    // (`Loading media from 'https://github.com/…/sound.ogg'`) and nothing
+    // else; for plugins whose `@source` is the repo serving that file this
+    // is the only identity the message speaks. Matched under the declared
+    // URL's path, so a plugin declaring a bare host (`github.com`) is never
+    // credited with every URL on that host.
+    (source !== undefined && quotedSourcePath(text, source))
+  );
+}
+
+/** Whether `text` quotes a URL living under the declared source's path. */
+function quotedSourcePath(text: string, source: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(source);
+  } catch {
+    return false;
+  }
+  // origin + first path segment at minimum: a bare host claims nothing,
+  // because every plugin hosted there would be credited with every URL.
+  const prefix = `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  if (prefix.length <= parsed.origin.length + 1) return false;
+  return [...text.matchAll(/https?:\/\/[^\s'"[\]()<>]+/g)].some((match) =>
+    match[0].replace(/\/+$/, "").startsWith(prefix),
   );
 }
 
@@ -253,11 +307,12 @@ function partitionAttributed(
   messages: readonly string[],
   name: string,
   origin?: string,
+  source?: string,
 ): [attributed: string[], rest: string[]] {
   const attributed: string[] = [];
   const rest: string[] = [];
   for (const message of messages) {
-    (isAttributedTo(message, name, origin) ? attributed : rest).push(message);
+    (isAttributedTo(message, name, origin, source) ? attributed : rest).push(message);
   }
   return [attributed, rest];
 }
@@ -301,6 +356,12 @@ export function analyze(
   const displayNameOf = (entry: AcceptanceEntry): string =>
     registeredNames[hostIdOf(entry)] ?? entry.name;
 
+  // The on-page evidence each entry's own code is labeled with, when the
+  // ecosystem labels it: Shelter's sourceURL folder, BetterDiscord's
+  // evaluated plugin path.
+  const evalOriginOf = (entry: AcceptanceEntry): string | undefined =>
+    shelterOrigin(entry.id) ?? bdOrigin(entry.file);
+
   // Renderer errors are attributed once for the whole run; leftovers become
   // run-level failures (never silently dropped).
   const unattributedRendererErrors: string[] = [];
@@ -309,7 +370,7 @@ export function analyze(
     let rest = [...rendererErrors];
     for (const entry of acceptance) {
       const name = displayNameOf(entry);
-      const [mine, leftover] = partitionAttributed(rest, name, shelterOrigin(entry.id));
+      const [mine, leftover] = partitionAttributed(rest, name, evalOriginOf(entry), entry.source);
       if (mine.length > 0) perPluginRendererErrors.set(name, mine);
       rest = leftover;
     }
@@ -331,8 +392,13 @@ export function analyze(
   for (const entry of acceptance) {
     const hostId = hostIdOf(entry);
     const name = displayNameOf(entry);
-    const origin = shelterOrigin(entry.id);
-    const [pluginWarnings, leftover] = partitionAttributed(unattributedWarnings, name, origin);
+    const origin = evalOriginOf(entry);
+    const [pluginWarnings, leftover] = partitionAttributed(
+      unattributedWarnings,
+      name,
+      origin,
+      entry.source,
+    );
     unattributedWarnings = leftover;
 
     const registered = states.has(hostId);
