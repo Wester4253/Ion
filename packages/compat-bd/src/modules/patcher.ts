@@ -118,7 +118,19 @@ function readProp(target: object, key: string): unknown {
 }
 
 function writeProp(target: object, key: string, value: unknown): void {
-  (target as Record<string, unknown>)[key] = value;
+  try {
+    (target as Record<string, unknown>)[key] = value;
+  } catch {
+    // The property exists as a getter-only accessor (no setter). Replace the
+    // full descriptor so the write succeeds; upstream BD behaves the same way
+    // because it also performs a direct assignment.
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+  }
 }
 
 /** Upstream invokes before-callbacks with exactly `(thisObject, args)`. */

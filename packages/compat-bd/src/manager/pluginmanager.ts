@@ -288,18 +288,33 @@ export class BdPluginManager {
   }
 
   /** Registers with the host; false (plus a one-line reason) on a clash. */
+  /**
+   * Registers the addon with the host. When a plugin name collides with one
+   * already registered (e.g. Vencord's `BetterFolders`), it appends ` (BD)`
+   * to the display name rather than skipping the plugin. The id stays unique
+   * (`bd.<name>`), so the host's identity invariant holds; only the human
+   * label changes.
+   */
   #register(host: IonPluginsApi, record: BdPluginRecord): boolean {
-    const clash = host
-      .list()
-      .find((entry) => entry.name === record.meta.name || entry.id === record.hostId);
-    if (clash) {
+    const idClash = host.list().find((entry) => entry.id === record.hostId);
+    if (idClash) {
       adapterLogger.warn(
-        `${record.meta.filename}: skipped — the host already has "${clash.name}" (${clash.id})`,
+        `${record.meta.filename}: skipped — the host already has id "${record.hostId}"`,
       );
       return false;
     }
+
+    const nameClash = host.list().find((entry) => entry.name === record.meta.name);
+    const displayName = nameClash ? `${record.meta.name} (BD)` : record.meta.name;
+    if (nameClash) {
+      adapterLogger.info(
+        `${record.meta.filename}: display name "${record.meta.name}" clashes with ` +
+          `${nameClash.id} — registered as "${displayName}"`,
+      );
+    }
+
     try {
-      host.register(this.#toHostPlugin(record));
+      host.register(this.#toHostPlugin(record, displayName));
     } catch (error) {
       adapterLogger.warn(`${record.meta.filename}: skipped — ${errorMessage(error)}`);
       return false;
@@ -307,10 +322,10 @@ export class BdPluginManager {
     return true;
   }
 
-  #toHostPlugin(record: BdPluginRecord): IonPlugin {
+  #toHostPlugin(record: BdPluginRecord, name: string): IonPlugin {
     return {
       id: record.hostId,
-      name: record.meta.name,
+      name,
       description: record.meta.description,
       authors: [{ name: record.meta.author }],
       version: record.meta.version,

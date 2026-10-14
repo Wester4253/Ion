@@ -101,6 +101,28 @@ describe("getModule", () => {
     expect(typeof found?.["sendMessage"]).toBe("function");
   });
 
+  it("resolves webpack lazy getters so classes can be extended", () => {
+    function RealStore(this: unknown): void {
+      return undefined;
+    }
+    RealStore.getName = (): string => "UserStore";
+    // Discord's minified shape: an arrow with no prototype that returns the class.
+    const lazy = (): unknown => RealStore;
+    useModules({ 1: { Store: lazy } });
+    const found = api.getModule(byKeys(["Store"])) as Record<string, unknown> | undefined;
+    expect(found?.["Store"]).toBe(RealStore);
+    expect(() => {
+      const Child = class extends (found?.["Store"] as typeof RealStore) {};
+      return Child;
+    }).not.toThrow();
+  });
+
+  it("leaves plain accessors returning primitives callable", () => {
+    const userStore = { _dispatchToken: "t", getName: () => "UserStore" };
+    useModules({ 1: userStore });
+    expect(api.getStore("UserStore")).toBe(userStore);
+  });
+
   it("returns undefined on a miss and throws when fatal", () => {
     useModules({ 1: { other: true } });
     expect(api.getModule(byKeys(["sendMessage"]))).toBeUndefined();

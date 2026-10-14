@@ -59,6 +59,7 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.spyOn(console, "info").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -197,7 +198,7 @@ describe("BdPluginManager", () => {
     expect(counters.started).toBe(1);
   });
 
-  it("skips a display name the host already owns", async () => {
+  it("disambiguates a display name the host already owns", async () => {
     installShell({ "FakeNitro.plugin.js": pluginSource("FakeNitro", CLASS_BODY) });
     const registered = installHost({
       id: "FakeNitro",
@@ -207,13 +208,15 @@ describe("BdPluginManager", () => {
 
     const records = await new BdPluginManager().initialize();
 
-    expect(records).toHaveLength(0);
-    expect(registered).toHaveLength(1);
-    expect(console.warn).toHaveBeenCalledWith(
+    expect(records).toHaveLength(1);
+    expect(records[0]?.meta.name).toBe("FakeNitro");
+    expect(registered).toHaveLength(2);
+    expect(registered[1]).toMatchObject({ id: "bd.FakeNitro", name: "FakeNitro (BD)" });
+    expect(console.info).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       "",
-      expect.stringContaining('FakeNitro.plugin.js: skipped — the host already has "FakeNitro"'),
+      expect.stringContaining('FakeNitro.plugin.js: display name "FakeNitro" clashes'),
     );
   });
 

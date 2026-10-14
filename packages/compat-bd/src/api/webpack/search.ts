@@ -44,6 +44,64 @@ export function* everyModule(): Generator<BdModule> {
   }
 }
 
+function isLazyGetter(value: unknown): value is () => unknown {
+  if (typeof value !== "function" || "prototype" in value) return false;
+  // Webpack lazy getters are arrow functions (`r=>e.get(t,r)`); concise
+  // class/object methods also lack `.prototype` but their source never
+  // contains `=>`. The check keeps methods (e.g. a store's `getName()`)
+  // from being invoked as if they were resolvers.
+  try {
+    return Function.prototype.toString.call(value).includes("=>");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves a suspected lazy getter, but only when it yields a
+ * non-primitive — the shape of a real module (object, class, function).
+ * An arrow that returns a string or number is an ordinary accessor (a
+ * store's `getName()`), not a resolver, and must be left callable.
+ */
+function resolveLazy(value: () => unknown): unknown {
+  let actual: unknown;
+  try {
+    actual = value();
+  } catch {
+    return undefined;
+  }
+  if (actual === null || actual === undefined) return undefined;
+  if (typeof actual !== "object" && typeof actual !== "function") return undefined;
+  return actual;
+}
+
+/**
+ * Wraps an exports object so that any property whose value is a webpack
+ * lazy getter — an arrow function with no `prototype`, the shape
+ * `r=>e.get(t,r)` takes in Discord's minified bundles — is resolved by
+ * calling it once. Without this, `getByKeys("Store")` can hand back a
+ * module whose `Store` property is the lazy resolver itself, and plugins
+ * that `extend` it die with "Class extends value r=>e.get(t,r) is not a
+ * constructor". When no property is a lazy getter the original object is
+ * returned unchanged, preserving reference identity for the common case.
+ */
+function resolveExports(exports: object): object {
+  const resolved = exports as Record<string, unknown>;
+  let changed = false;
+  const copy: Record<string, unknown> = { ...resolved };
+  for (const key of Object.keys(exports)) {
+    const value = resolved[key];
+    if (isLazyGetter(value)) {
+      const actual = resolveLazy(value);
+      if (actual !== undefined) {
+        copy[key] = actual;
+        changed = true;
+      }
+    }
+  }
+  return changed ? copy : exports;
+}
+
 /**
  * BD's single-module match: exports first, then — depending on options —
  * the default-export key or every key, with raw/withKey/map shaping the
@@ -69,7 +127,7 @@ export function getMatched(
     if (map) return mapObject(module.exports as object, map);
     if (raw) return module;
     if (withKey) return [module, "exports"];
-    return module.exports;
+    return resolveExports(module.exports as object);
   }
 
   if (!searchExports && !searchDefault) return undefined;

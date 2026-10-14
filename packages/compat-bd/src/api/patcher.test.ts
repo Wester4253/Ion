@@ -261,6 +261,30 @@ describe("unpatchable targets", () => {
     expect(typeof mod["missing"]).toBe("function");
   });
 
+  it("replaces getter-only properties instead of throwing", () => {
+    const target: Record<string, unknown> = {};
+    Object.defineProperty(target, "sendMessage", {
+      get:
+        () =>
+        (content: string): string =>
+          `sent ${content}`,
+      configurable: true,
+      enumerable: true,
+    });
+    const patcher = new Patcher();
+    const unpatch = patcher.after(
+      "GetterTarget",
+      target as never,
+      "sendMessage" as never,
+      () => "patched",
+    );
+
+    expect(unpatch).not.toBeNull();
+    expect((target["sendMessage"] as (content: string) => string)("hi")).toBe("patched");
+    unpatch?.();
+    expect((target["sendMessage"] as (content: string) => string)("hi")).toBe("sent hi");
+  });
+
   it("returns null and warns (attributed) when the module cannot be resolved", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const patcher = new Patcher();
