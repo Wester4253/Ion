@@ -58,10 +58,12 @@ const CSP_GRANTS: readonly (readonly [source: string, directives: readonly strin
   ["shindex.uwu.network", ["connect-src"]],
   // Codeblocks Plus Reloaded fetches shiki-es wasm/themes from jsdelivr,
   // and Revert Font @imports the old-discord-font stylesheet through the
-  // same host — both measured failing without it. Stylesheets only as far
-  // as active content goes: nothing here wants jsdelivr script-src, and a
-  // code-execution grant would be an owner decision (Q9).
-  ["cdn.jsdelivr.net", ["connect-src", "style-src"]],
+  // same host — the stylesheet then loads its woff2/ttf faces from there
+  // too, so all three directives come from that one measured consumer
+  // chain. Active content is the line not crossed: nothing here grants
+  // jsdelivr script-src, and a code-execution grant is an owner decision
+  // (Q9).
+  ["cdn.jsdelivr.net", ["connect-src", "style-src", "font-src"]],
   // Snazzy Shelter fetches its theme manifest from the Cumcord themes
   // repo; the connect refusal lands on its row as an uncaught error.
   ["cumcordthemes.github.io", ["connect-src"]],

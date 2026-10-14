@@ -67,16 +67,16 @@ violations patched plugins cause on purpose), and appends a strict allowlist.
 Every grant names its consumer, so the whole set of external hosts Ion lets
 Discord's document reach is reviewable in one table.
 
-| Grant                       | Directives                 | Consumer                                                                                                                                          |
-| --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `*.vencord.dev`             | `connect-src`, `img-src`   | BadgeAPI's badges and their images (upstream grants the same).                                                                                    |
-| `raw.githubusercontent.com` | `connect-src`, `img-src`   | tarp's theme list, userpfp's avatar files, and the Ion Index (`index.json` + compiled Vencord plugin artifacts).                                  |
-| `userpfp.github.io`         | `connect-src`              | userpfp's manifest (`source/data.json`); it serves no images.                                                                                     |
-| `ws://localhost:*`          | `connect-src`              | Plugins driving a local service by hostname (Intiface); Discord's own policy permits the same machine as `127.0.0.1`.                             |
-| `api.betterdiscord.app`     | `connect-src`              | The catalog's BetterDiscord plugin/theme listing.                                                                                                 |
-| `shindex.uwu.network`       | `connect-src`              | The catalog's live Shelter plugin index.                                                                                                          |
-| `cdn.jsdelivr.net`          | `connect-src`, `style-src` | Codeblocks Plus Reloaded's shiki-es wasm assets, and Revert Font's `@import` of the old-discord-font stylesheet. `script-src` stays blocked (Q9). |
-| `cumcordthemes.github.io`   | `connect-src`              | Snazzy Shelter's theme manifest (`Cumsock/repo.json`).                                                                                            |
+| Grant                       | Directives                             | Consumer                                                                                                                                                                                     |
+| --------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `*.vencord.dev`             | `connect-src`, `img-src`               | BadgeAPI's badges and their images (upstream grants the same).                                                                                                                               |
+| `raw.githubusercontent.com` | `connect-src`, `img-src`               | tarp's theme list, userpfp's avatar files, and the Ion Index (`index.json` + compiled Vencord plugin artifacts).                                                                             |
+| `userpfp.github.io`         | `connect-src`                          | userpfp's manifest (`source/data.json`); it serves no images.                                                                                                                                |
+| `ws://localhost:*`          | `connect-src`                          | Plugins driving a local service by hostname (Intiface); Discord's own policy permits the same machine as `127.0.0.1`.                                                                        |
+| `api.betterdiscord.app`     | `connect-src`                          | The catalog's BetterDiscord plugin/theme listing.                                                                                                                                            |
+| `shindex.uwu.network`       | `connect-src`                          | The catalog's live Shelter plugin index.                                                                                                                                                     |
+| `cdn.jsdelivr.net`          | `connect-src`, `style-src`, `font-src` | Codeblocks Plus Reloaded's shiki-es wasm assets, Revert Font's `@import` of the old-discord-font stylesheet, and the woff2/ttf faces that stylesheet pulls. `script-src` stays blocked (Q9). |
+| `cumcordthemes.github.io`   | `connect-src`                          | Snazzy Shelter's theme manifest (`Cumsock/repo.json`).                                                                                                                                       |
 
 The table is **a deliberate deviation from stock Discord**, which blocks
 these hosts: a plugin that fetches its data from GitHub would otherwise fail

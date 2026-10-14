@@ -10,11 +10,11 @@ const CONNECT_GRANTS =
   "*.vencord.dev raw.githubusercontent.com userpfp.github.io ws://localhost:* http://localhost:* api.betterdiscord.app shindex.uwu.network cdn.jsdelivr.net cumcordthemes.github.io";
 const IMG_GRANTS = "*.vencord.dev raw.githubusercontent.com";
 
-/** The exact rewrite of DISCORD_POLICY: grants appended, order and separators preserved. The `style-src` directive is created from `default-src` because DISCORD_POLICY has none. */
+/** The exact rewrite of DISCORD_POLICY: grants appended, order and separators preserved. The `style-src` and `font-src` directives are created from `default-src` because DISCORD_POLICY has none. */
 const EXPECTED_PATCHED_POLICY =
   `default-src 'self'; connect-src https://discord.com https://status.discord.com ${CONNECT_GRANTS}; ` +
   `img-src 'self' blob: https://cdn.discordapp.com ${IMG_GRANTS}; upgrade-insecure-requests; ` +
-  `style-src 'self' cdn.jsdelivr.net`;
+  `style-src 'self' cdn.jsdelivr.net; font-src 'self' cdn.jsdelivr.net`;
 
 describe("parsePolicy", () => {
   test("splits directives from sources", () => {
@@ -92,11 +92,13 @@ describe("patchPolicy", () => {
   });
 
   test("grants jsdelivr's stylesheet import but never its scripts", () => {
-    // Revert Font's @import is passive content; script-src from the same
-    // host would execute third-party code in Discord's document, which is
-    // an owner decision (QUESTIONS.md Q9), not a measured-need grant.
+    // Revert Font's @import, and the font faces its stylesheet pulls, are
+    // passive content; script-src from the same host would execute
+    // third-party code in Discord's document, which is an owner decision
+    // (QUESTIONS.md Q9), not a measured-need grant.
     const directives = parsePolicy(patchPolicy(DISCORD_POLICY));
     expect(directives.get("style-src")).toContain("cdn.jsdelivr.net");
+    expect(directives.get("font-src")).toContain("cdn.jsdelivr.net");
     expect(directives.has("script-src")).toBe(false);
   });
 
