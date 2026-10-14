@@ -54,6 +54,41 @@ interface VencordNativeApi {
     isDomainAllowed(): Promise<boolean>;
     requestAddOverride(): Promise<{ ok: boolean; value?: never; error?: string }>;
   };
+  /**
+   * Stand-ins for upstream's per-plugin main-process natives (each plugin's
+   * `native.ts`, minus Electron's `IpcMainInvokeEvent` first parameter —
+   * `PluginNative<>` strips that at the call site). The vendored tree pins
+   * exactly these five plugins; `scripts/vendor.mjs --check` flags any
+   * snapshot change that would add more.
+   */
+  readonly pluginHelpers: {
+    OpenInApp: {
+      resolveRedirect(url: string): Promise<string>;
+    };
+    Translate: {
+      makeDeeplTranslateRequest(
+        pro: boolean,
+        apiKey: string,
+        payload: string,
+      ): Promise<{ status: number; data: unknown }>;
+      makeKagiTranslateRequest(
+        token: string,
+        text: string,
+        sourceLang: string,
+        targetLang: string,
+      ): Promise<{ status: number; data: unknown }>;
+    };
+    VoiceMessages: {
+      readRecording(filePath: string): Promise<Uint8Array | null>;
+    };
+    XSOverlay: {
+      sendToOverlay(data: unknown): void;
+      closeSocket(): void;
+    };
+    ConsoleShortcuts: {
+      initDevtoolsOpenEagerLoad(): void;
+    };
+  };
 }
 
 interface Window {

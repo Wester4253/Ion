@@ -522,13 +522,21 @@ export type FactoryListener = (factory: unknown, moduleId: PropertyKey) => void;
 export const factoryListeners = new Set<FactoryListener>();
 
 let resolveReady!: () => void;
-/** Upstream resolves its webpack-ready promise when the gateway connects. */
+/**
+ * Upstream settles this when the FluxDispatcher receives `CONNECTION_OPEN`:
+ * the vendored common modules wire exactly that (`m.subscribe("CONNECTION_OPEN",
+ * cb)` → `_resolveReady` below), and consumers — `consoleShortcuts`' eager
+ * load, dev helpers — rely on it meaning "the app is up" before forcing any
+ * lazies, because forcing component lookups on a page that has not loaded
+ * them yet logs errors that cannot be attributed to a plugin.
+ *
+ * Ion settles it the same way and gives it no other resolver: on a
+ * logged-out page there is no gateway connection, so it stays pending —
+ * which is also upstream's behavior.
+ */
 export const onceReady = new Promise<void>((resolve) => {
   resolveReady = resolve;
 });
-discovery()
-  .onceReady.then(resolveReady)
-  .catch(() => undefined);
 
 /**
  * Called by the vendored common modules when they consider webpack ready.

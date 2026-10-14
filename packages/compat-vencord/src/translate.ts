@@ -152,12 +152,39 @@ function wireSettings(definition: VencordPlugin): void {
   }
 }
 
+/**
+ * Upstream's `startPlugin` calls `p.start()` synchronously and discards the
+ * result, so an async `start()` that rejects — a helper app that is not
+ * running, a socket that never answers — surfaces as an unhandled rejection
+ * whose text names no plugin. Wrap the start once: upstream's started/failed
+ * semantics are untouched, the rejection is marked handled, and the failure
+ * is logged under the plugin's name so it lands in the run's evidence
+ * attributed instead of as an anonymous renderer error.
+ */
+function attributeAsyncStartRejection(definition: VencordPlugin): void {
+  const original: ((this: unknown) => unknown) | undefined = definition.start;
+  if (typeof original !== "function") return;
+  const wrapped = function (this: unknown): void {
+    const result = original.call(this);
+    if (result instanceof Promise) {
+      result.catch((error: unknown) => {
+        logger.error(`${definition.name}: async start() rejected`, error);
+      });
+    }
+  };
+  // The runtime object is the vendored plugin's own literal; the type marks
+  // lifecycle members readonly so translation cannot rewrite them casually —
+  // this is the one deliberate, documented rewrite.
+  (definition as { start?: () => void }).start = wrapped;
+}
+
 export function translatePlugin(definition: VencordPlugin, options: TranslateOptions): IonPlugin {
   const id = /\s/.test(definition.name) ? definition.name.replace(/\s+/g, "_") : definition.name;
   const pluginPath = `Vencord.Plugins.plugins[${JSON.stringify(definition.name)}]`;
 
   bindHooks(definition);
   wireSettings(definition);
+  attributeAsyncStartRejection(definition);
 
   // A Vencord settings-UI toggle (or an Ion panel toggle) flips the store;
   // this listener hands the change to the host, whose state guards make the

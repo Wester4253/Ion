@@ -147,7 +147,14 @@ function pluginsModule() {
     .map((entry, index) => `  { def: def${index}, folder: ${JSON.stringify(entry.folder)} },`)
     .join("\n");
 
-  return `${imports}
+  return `// The settings store must exist before any plugin body runs: several
+// plugins call migratePluginSettings(...) at module-eval, which reads
+// SettingsStore.plain. Settings imports this barrel back, so naming it
+// first lets the store complete here, mid-cycle — the same ordering
+// upstream gets from \`import "~plugins"\` leading its entry file.
+import "@api/Settings";
+
+${imports}
 
 const entries = [
 ${entries}

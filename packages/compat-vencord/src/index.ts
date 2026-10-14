@@ -11,9 +11,13 @@
  * Import order is load-bearing:
  *   1. src/shims/globals — installs window.VencordNative before any vendored
  *      module evaluates (the Settings store reads it at module-eval time),
- *   2. ~plugins — evaluates every compiled plugin definition and builds the
- *      name→definition registry, which Settings' defaults and translation
- *      both consume.
+ *   2. ~plugins — starts the plugin barrel before anything else reaches
+ *      @api/Settings, mirroring upstream's `import "~plugins"` as the first
+ *      line of Vencord.ts. Settings imports the barrel back, so entering the
+ *      barrel first lets Settings complete mid-cycle; entering Settings first
+ *      would run every plugin body against an unfinished store, and plugins
+ *      that call migratePluginSettings(...) at module-eval read
+ *      SettingsStore.plain and crash the injection.
  * Everything after that is plain assembly: the upstream global namespace,
  * then registration with the Ion plugin host, whose stages then drive each
  * plugin's start (translated from upstream's startAt).
@@ -21,12 +25,13 @@
 
 import "./shims/globals";
 
+import plugins from "~plugins";
+
 import { loadVencordThemes, watchVencordThemes } from "./themes";
 import { PlainSettings, Settings } from "@api/Settings";
 import { initStyles } from "@api/Styles";
 import { Logger } from "@utils/Logger";
 import * as Common from "@webpack/common";
-import plugins from "~plugins";
 
 import * as WebpackShim from "./shims/webpack";
 import { translatePlugin } from "./translate";

@@ -10,6 +10,9 @@
  *   vendored Settings store requires. It is per-profile and never touches
  *   Vesktop's or Discord's storage.
  * - `native.openExternal` goes through Ion's allowlisted shell bridge.
+ * - `pluginHelpers` stands in for upstream's per-plugin main-process
+ *   natives; each entry below states its own contract (a true no-op,
+ *   upstream's own failure shape, or a throw naming plugin and method).
  * - Vencord-managed features whose backing service belongs to Ion instead
  *   (themes directory, QuickCss, the Vencord updater, cloud sync) either
  *   ride on Ion's own engine or answer with a descriptive failure; every one
@@ -66,6 +69,29 @@ function parse<T>(key: string, fallback: T): T {
 /** Rejected with a message naming the feature and its Ion owner. */
 function unavailable(feature: string, owner: string): Promise<never> {
   return Promise.reject(new Error(`compat-vencord: ${feature} is handled by ${owner} in Ion`));
+}
+
+/**
+ * Throw naming the upstream main-process native Ion does not bridge. Sync on
+ * purpose: an async-looking caller still hits the throw at its own call site,
+ * and a caller that ignores the return value cannot swallow it either.
+ */
+function unbridgedNative(plugin: string, method: string): never {
+  throw new Error(
+    `compat-vencord: ${plugin}.${method}() runs in Electron's main process upstream; Ion runs no plugin code there`,
+  );
+}
+
+/**
+ * Upstream's translate natives answer `{ status: -1, data }` when a request
+ * cannot be made at all — callers surface `data` in an error toast. Same
+ * contract, with Ion's reason where the network failure would be.
+ */
+function unbridgedTranslateRequest(feature: string): Promise<{ status: number; data: string }> {
+  return Promise.resolve({
+    status: -1,
+    data: `${feature} requests run in Electron's main process upstream, which Ion does not bridge`,
+  });
 }
 
 function installVencordNative(): void {
@@ -136,6 +162,45 @@ function installVencordNative(): void {
       isDomainAllowed: () => Promise.resolve(true),
       requestAddOverride: () =>
         Promise.resolve({ ok: false, error: "Ion does not maintain a CSP override list" }),
+    },
+    pluginHelpers: {
+      // Upstream runs each plugin's native.ts in the main process; Ion runs
+      // no plugin code there. Every entry answers honestly: a true no-op
+      // where the main-process step is inert for Ion, upstream's own failure
+      // contract where one exists, or a throw naming plugin and method.
+      OpenInApp: {
+        // Reached only for shortlinks (spotify.link, s.team) whose HEAD
+        // redirects the renderer cannot follow — upstream's native.ts makes
+        // the same CORS observation about them.
+        resolveRedirect: () => unbridgedNative("OpenInApp", "resolveRedirect"),
+      },
+      Translate: {
+        // The default service (Google) fetches from the renderer and never
+        // touches these; DeepL-with-key and Kagi callers read the -1 status
+        // and toast the attached reason.
+        makeDeeplTranslateRequest: () => unbridgedTranslateRequest("DeepL"),
+        makeKagiTranslateRequest: () => unbridgedTranslateRequest("Kagi"),
+      },
+      VoiceMessages: {
+        // Only reachable through the desktop recorder, which the vesktop
+        // build target never selects (IS_DISCORD_DESKTOP is false).
+        readRecording: () => unbridgedNative("VoiceMessages", "readRecording"),
+      },
+      XSOverlay: {
+        // The UDP path is an opt-in legacy setting; the default WebSocket
+        // path is renderer-side and needs no helper.
+        sendToOverlay: () => unbridgedNative("XSOverlay", "sendToOverlay"),
+        // Closes the main-side UDP socket that only exists after
+        // sendToOverlay; Ion never opens one, so there is nothing to close —
+        // upstream would no-op identically.
+        closeSocket: () => undefined,
+      },
+      ConsoleShortcuts: {
+        // Upstream re-runs the shortcut eager-load when devtools opens (a
+        // main-process listener Ion has no equivalent for); start() above
+        // already eager-loads once. Documented in docs/status.md.
+        initDevtoolsOpenEagerLoad: () => undefined,
+      },
     },
   };
 
