@@ -149,27 +149,21 @@ Live log for the phase-6-8 run. Updated at every commit/milestone.
   later, 2 need absent helper apps, plus USRBG's CSP-blocked service (Q8).
   Raw run: `compat-runs/vencord-full/`.
 
+## Done this phase
+
+- Phase 8 re-measure complete: Shelter index sweep **108 pass / 5 warnings / 17 fail / 1 deferred**, `runHealthy: true` (0 unattributed, 0 dropped). The capture truncation bug (20-slot silent slice) was fixed, attribution now matches stack frames (`s://!SHELTER/<folder>:line`), and three expected-error classes carry consumer-named reasons (DiscordFeed's JetBrains Mono stylesheet, toki pona taso's ijo font, Snazzy Shelter's dead-theme 404s). Two CSP grant rounds added for measured needs: jsdelivr `connect-src`+`style-src`+`font-src` (Codeblocks + Revert Font chain) and `cumcordthemes.github.io` `connect-src` (Snazzy manifest). Two posture grants (jsdelivr `script-src` for Pyodide, wildcard `*.github.io` `connect-src` for Snazzy's repo sweep) remain in Q9. Every failure has a one-line diagnosis in `shelter-diagnoses.ts`. Generated scoreboard: `docs/compat-shelter-index.md`.
+
+- Phase 10 complete: Vencord bulk acceptance **170 pass / 1 warnings / 8 fail / 1 deferred**, `runHealthy: true`, tier 1 177/3, tier 2 172/8; every failure carries a diagnosis in `acceptance.json`. Generated scoreboard: `docs/compat.md`.
+
 ## In progress
 
-- Phase 8 re-measure: the Shelter index sweep with stage 3 in, then owner
-  Tier 3 across all scoreboards.
+- Owner Tier 3 hand-checks across all scoreboards (Vencord 150 items, BD, Shelter, stage-3 settings) and the open questions Q1–Q9 in `QUESTIONS.md`.
 
 ## Next (dependency order)
 
-1. Owner Tier 3 hand-checks (Vencord 150 items, BD, Shelter, stage-3
-   settings) and the open questions Q1–Q8 in `QUESTIONS.md`.
-2. Phase 8 re-measure sweep; then any failures found are root-caused the
-   same way (fix or diagnose, never loosen a check).
-3. First real run of `.github/workflows/vencord-plugins.yml` on GitHub
-   (cannot be executed in this environment — owner-visible in the report).
+1. Owner Tier 3 and Q1–Q9 decisions.
+2. First real run of `.github/workflows/vencord-plugins.yml` on GitHub (cannot be executed in this environment — owner-visible in the report).
 
 ## Resume point
 
-- Branch `phase-6-8`, tree clean and green (typecheck, lint, 730 tests);
-  latest measurement is the Phase 10 scoreboard above (8 failures recorded
-  with diagnoses, not hidden). Everything since `ebd3115` is unpushed — the
-  push happens at the phase milestone, never to `main`.
-- Next exact step: push the phase-6-8 milestone, then the phase-8 Shelter
-  re-measure (`node packages/compat-harness/dist/index.js --ecosystem
-shelter --source index --out compat-runs/shelter-remeasure
---settle-ms 180000`).
+- Branch `phase-6-8`, tree clean and green (typecheck, lint, 734 tests); latest measurements are the Phase 10 and Phase 8 scoreboards above (all failures recorded with diagnoses, not hidden). Everything since `ebd3115` is unpushed — the push happens at the phase milestone, never to `main`.
