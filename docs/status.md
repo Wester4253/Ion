@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 2026-10-13. Phase numbers refer to the plan in `AGENTS.md`; this
+_Last updated: 2026-10-14. Phase numbers refer to the plan in `AGENTS.md`; this
 file is rewritten at each phase boundary, not incrementally patched._
 
 ## Done
@@ -16,6 +16,8 @@ file is rewritten at each phase boundary, not incrementally patched._
 | 6     | Vencord/Equicord adapter + acceptance scoreboard   | Measured: 32/32 plugins load on a logged-out session (30 pass, 1 warnings, 0 fail, 1 deferred) through a 180s Tier 2 soak; generated `docs/compat.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 7     | BetterDiscord adapter (`BdApi`, plugin/theme load) | Measured: 10-plugin starter set on a logged-out session, 7 pass / 0 warnings / 3 fail / 0 deferred through a 180s Tier 2 soak; generated `docs/compat-bd.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | 8     | Shelter adapter + bulk scoreboard                  | **In progress.** Live index sweep measured 109 pass / 11 warnings / 10 fail / 1 deferred through a 180 s Tier 2 soak ([compat-shelter-index.md](./compat-shelter-index.md); starter set 9/1/0 in [compat-shelter.md](./compat-shelter.md)). Stage 2 (`shelter.ui` = real `@uwu/shelter-ui`, both settings dialogs) and stage 3 (`registerSection` drawing + both React↔Solid bridges, see [shelter-stage3.md](./shelter-stage3.md)) are in; the plugin-store write bug is fixed (6 plugins recovered) and two CSP grant rounds recovered 2 more. Remaining: re-measure the sweep with stage 3 in, then owner Tier 3 |
+| 9     | In-app catalog browser                             | Committed: hybrid fetch from the Ion Index, BetterDiscord's API and Shelter's shindex, sha256-verified staging into each adapter's directory, `ion:fetch-url` IPC with its own host allowlist, Catalog section in the settings panel ([catalog-format.md](./catalog-format.md)). Covered by tests; the live install flow is owner Tier 3 — no scoreboard applies.                                                                                                                                                                                                                                                   |
+| 10    | Vencord bulk acceptance (180 plugins)              | Measured: **170 pass / 1 warnings / 8 fail / 1 deferred** through a 180 s Tier 2 soak, `runHealthy: true` (0 unattributed renderer errors), every failure carrying a one-line diagnosis; tier 1 177/3, tier 2 172/8. Generated scoreboard: [compat.md](./compat.md). Remaining: owner Tier 3 and the Q8 CSP decision.                                                                                                                                                                                                                                                                                               |
 
 Design details live in [architecture.md](./architecture.md); writing plugins
 against the host in [plugin-authoring.md](./plugin-authoring.md); Linux
@@ -81,7 +83,7 @@ against a live session. The GitHub Actions workflow
 publishes to an `ion-index/vencord/<version>` release — **written but not run
 here; its first real execution is untested.**
 
-## Phase 10 — Vencord/Equicord bulk acceptance (180 plugins, in progress)
+## Phase 10 — Vencord/Equicord bulk acceptance (180 plugins)
 
 **What runs.** The acceptance set grew from the 32-plugin starter set to all
 180 plugins upstream's own build rules ship (`packages/compat-vencord/
@@ -241,10 +243,16 @@ Tier-3-verified.
 
 ## Next
 
+- Vencord bulk acceptance (phase 10) is measured and committed: 170 pass /
+  1 warnings / 8 fail / 1 deferred through the 180 s Tier 2 soak, every
+  failure diagnosed in `acceptance.json` and rendered in
+  [compat.md](./compat.md). Remaining: owner Tier 3 hand-checks (150 items)
+  and the Q8 decision (grant `usrbg.is-hardly.online` connect-src or leave
+  USRBG blocked).
 - The catalog browser is in and committed (`ion:fetch-url` IPC, CSP grants,
   core catalog client, UI section). Remaining: owner Tier 3 hand-checks
-  (150 items across three scoreboards), the stage-3 settings checklist, and
-  the open questions Q1–Q7 in `QUESTIONS.md`.
+  (across all scoreboards), the stage-3 settings checklist, and the open
+  questions Q1–Q8 in `QUESTIONS.md`.
 - Packaging is in (AppImage, .deb, PKGBUILD/.SRCINFO for Arch — see
   [linux.md](./linux.md)); Windows is config plus an untested checklist.
 - Pending decision: Linux screenshare system audio (Electron has no loopback

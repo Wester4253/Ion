@@ -95,28 +95,81 @@ Live log for the phase-6-8 run. Updated at every commit/milestone.
   its vendored stylesheet, lucide icon geometry (ISC), and a "Deviations from
   upstream BetterDiscord" section covering every deliberate difference.
 
+- Phase 8 commits (Shelter adapter, milestone summaries):
+
+| Commit    | Summary                                                                            |
+| --------- | ---------------------------------------------------------------------------------- |
+| `7884af4` | expose `window.shelter` and run staged Shelter plugins                             |
+| `08db14e` | find the real dispatcher; load side-effect-only plugins                            |
+| `a5e8875` | `--source index` live-catalog sweep                                                |
+| `33f4317` | compile `@uwu/shelter-ui` into `shelter.ui`                                        |
+| `bdfcd78` | stop dropping every write to a plugin's store (6 plugins recovered)                |
+| `a6fd94d` | stage 3: `registerSection` draws into Discord's settings, real React↔Solid bridges |
+| `ae41fd1` | scoreboard regenerated after stage 3 — 6 settings warnings now pass                |
+
+- **Phase 8 scoreboard:** starter set **9 pass / 1 warnings / 0 fail**
+  (`docs/compat-shelter.md`); live index sweep **109 pass / 11 warnings /
+  10 fail / 1 deferred** through a 180 s Tier 2 soak
+  (`docs/compat-shelter-index.md`). Remaining: re-measure the sweep with
+  stage 3 in, then owner Tier 3.
+- **Landed alongside phase 8:** the theme engine (`a72cd68` — header parsing
+  for plain CSS/BD/Vencord themes, hot reload, injection waiting for the
+  document; `docs/themes.md`) and packaging (`32a8dbe`, `9a18b4b`, `1d74eaa`
+  — AppImage, .deb, first-class Arch PKGBUILD/.SRCINFO, Windows checklist;
+  `docs/linux.md`). Both test-covered, neither part of a scoreboard.
+
+- **Phase 9 (`44b1b6e`, `ded4898`):** hybrid in-app catalog — Ion Index +
+  BetterDiscord API + Shelter shindex, sha256-verified staging into each
+  adapter's directory, `ion:fetch-url` IPC with its own host allowlist, a
+  Catalog section in the settings panel (`docs/catalog-format.md`).
+
+- Phase 10 commits (Vencord bulk acceptance 32 → 180 plugins, all green:
+  typecheck, lint, 730 tests):
+
+| Commit    | Summary                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------------------- |
+| `d44a5c8` | acceptance.json expanded to every upstream plugin (32 → 180)                                         |
+| `d6daaaa` | vendor the full import closure (618 files, sha256-pinned)                                            |
+| `5a72860` | build and serve the full plugin set                                                                  |
+| `1f05c4b` | core: reject descriptor-less proxy fabrications in module matching (the FluxDispatcher poison)       |
+| `76c8c1a` | compat-vencord: eval order, typed native shims, CONNECTION_OPEN `onceReady`, attributed async starts |
+| `8169825` | harness: vencord host-id normalization + upstream log attribution                                    |
+| `e84b493` | shell: full-text console capture over CDP (Runtime + Log) for smoke runs                             |
+| `5a02d43` | diagnoses for all 8 failures, Phase 10 status                                                        |
+| `2ae081e` | scoreboard from the 180 s Tier 2 soak                                                                |
+
+- **Phase 10 scoreboard (measured, logged-out, 180 s Tier 2 soak):** **170
+  pass, 1 warnings (CommandsAPI init notice), 8 fail, 1 deferred**; tier 1
+  177/3, tier 2 172/8; `runHealthy: true` with **0 unattributed renderer
+  errors**. Four root causes fixed without loosening a single check
+  (react-aria proxy poisoning `FluxDispatcher`, global-object nested scans,
+  discovery-time `onceReady`, anonymous async-start rejections); every
+  remaining failure carries a one-line `diagnosis` in `acceptance.json` — 3
+  force modules the logged-out page never loads, 3 race modules that load
+  later, 2 need absent helper apps, plus USRBG's CSP-blocked service (Q8).
+  Raw run: `compat-runs/vencord-full/`.
+
 ## In progress
 
-- Phase 8: Shelter adapter (`packages/compat-shelter`) + the bulk harness pass
-  (every plugin each source offers, scored into one generated doc).
+- Phase 8 re-measure: the Shelter index sweep with stage 3 in, then owner
+  Tier 3 across all scoreboards.
 
 ## Next (dependency order)
 
-1. Phase 8 (Shelter adapter + bulk scoreboard), then extend the generated docs
-   with those ecosystems.
-2. Theme engine hardening (plain CSS/BD/Vencord headers/hot reload), catalog
-   browser (Ion Index + live APIs), packaging (AppImage/.deb/PKGBUILD +
-   Windows installer config + manual test checklist).
+1. Owner Tier 3 hand-checks (Vencord 150 items, BD, Shelter, stage-3
+   settings) and the open questions Q1–Q8 in `QUESTIONS.md`.
+2. Phase 8 re-measure sweep; then any failures found are root-caused the
+   same way (fix or diagnose, never loosen a check).
 3. First real run of `.github/workflows/vencord-plugins.yml` on GitHub
    (cannot be executed in this environment — owner-visible in the report).
 
 ## Resume point
 
-- Branch `phase-6-8`, tree clean and green (typecheck, lint, 560 tests);
-  latest isolated harness run is the Phase 7 scoreboard above (3 failures
-  recorded, not hidden). Everything through `52ff4b2` is unpushed — the push
-  happens at the phase milestone, never to `main`.
-- Next exact step: scaffold `packages/compat-shelter` — Shelter's addon
-  format (JSON manifest + module function), its `api` surface, and the
-  `PluginFormatAdapter` registration into the host, with unit tests before any
-  live run; then point the harness at the full Shelter list for the bulk pass.
+- Branch `phase-6-8`, tree clean and green (typecheck, lint, 730 tests);
+  latest measurement is the Phase 10 scoreboard above (8 failures recorded
+  with diagnoses, not hidden). Everything since `ebd3115` is unpushed — the
+  push happens at the phase milestone, never to `main`.
+- Next exact step: push the phase-6-8 milestone, then the phase-8 Shelter
+  re-measure (`node packages/compat-harness/dist/index.js --ecosystem
+shelter --source index --out compat-runs/shelter-remeasure
+--settle-ms 180000`).
