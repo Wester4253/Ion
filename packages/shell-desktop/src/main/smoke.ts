@@ -60,6 +60,53 @@ const EXPECTED_ERRORS: readonly { readonly match: RegExp; readonly reason: strin
     match: /Sentry successfully disabled/,
     reason: "NoTrack deliberately aborts Sentry's module evaluation",
   },
+  {
+    // Vencord's UserSettings store logs this when the settings catalog
+    // module is missing. A logged-out page never loads it, and the plugins
+    // whose start() forces it are already reported as start failures under
+    // their own names.
+    match: /Didn't find settings module/,
+    reason: "The UserSettings catalog is absent on the logged-out page",
+  },
+  {
+    // ShikiCodeblocks.desktop pulls a devicon stylesheet from a CDN;
+    // Discord's style-src CSP refuses it, so the plugin renders without
+    // those icons and names no plugin in the browser's refusal line.
+    match: /devicons\/devicon@[^']+\/devicon\.min\.css/,
+    reason: "ShikiCodeblocks' devicon stylesheet is refused by Discord's CSP",
+  },
+  {
+    // USRBG fetches its background list from its own service; Discord's
+    // connect-src CSP refuses it (both the connection line and the Fetch
+    // API line carry the URL). The plugin logs its own attributed
+    // rejection alongside these browser-level refusals.
+    match: /usrbg\.is-hardly\.online/,
+    reason: "USRBG's service is refused by Discord's connect-src CSP",
+  },
+  {
+    // WebRichPresence (arRPC) opens its bridge socket at start; the bridge
+    // app is not installed on the machine under test, so the connection
+    // is refused and the plugin logs its own attributed rejection beside it.
+    match: /WebSocket connection to 'ws:\/\/127\.0\.0\.1:1337\/' failed/,
+    reason: "WebRichPresence (arRPC) needs the local arRPC bridge on port 1337",
+  },
+  {
+    // XSOverlay opens its helper-app socket at start; the XSOverlay app is
+    // not installed on the machine under test, so the connection is
+    // refused and the plugin logs its own attributed rejection beside it.
+    match: /WebSocket connection to 'ws:\/\/127\.0\.0\.1:42070\/\?client=Vencord' failed/,
+    reason: "XSOverlay needs the XSOverlay app listening on 127.0.0.1:42070",
+  },
+  {
+    // relationshipNotifier's start() fires syncAndRunChecks() without
+    // awaiting it (vendor code, verbatim); where UserStore's module has
+    // not loaded, the async body rejects and no plugin name survives into
+    // the message. The plugins whose paths do this are still reported —
+    // by start failure or by their own attributed rejections — and this
+    // shape has exactly one cause: reading the store before it exists.
+    match: /Cannot read properties of undefined \(reading 'getCurrentUser'\)/,
+    reason: "A plugin read UserStore before the store module loaded",
+  },
 ];
 
 export function parseSmokeArg(argv: readonly string[]): string | null {
@@ -69,33 +116,77 @@ export function parseSmokeArg(argv: readonly string[]): string | null {
   return value.startsWith("=") && value.length > 1 ? value.slice(1) : ".";
 }
 
-export function runSmoke(
-  outputDir: string,
-  win: BrowserWindow,
-  options: { readonly settleMs?: number | undefined } = {},
-): void {
-  mkdirSync(outputDir, { recursive: true });
+/** Console evidence collected during a smoke run. */
+export interface SmokeCapture {
+  readonly rendererErrors: string[];
+  readonly expectedErrors: Map<string, number>;
+  readonly warnings: Set<string>;
+  detach(): void;
+}
 
-  const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
-  const timer = setTimeout(() => void finish("timeout"), settleMs + FALLBACK_MARGIN_MS);
+interface ConsoleArg {
+  readonly value?: unknown;
+  readonly description?: string;
+  readonly unserializableValue?: string;
+}
 
-  const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+interface ConsoleCall {
+  readonly type: string;
+  readonly args: readonly ConsoleArg[];
+  readonly stackTrace?: { readonly callFrames?: readonly { readonly url?: string }[] };
+}
 
+interface ExceptionDetails {
+  readonly text?: string;
+  readonly url?: string;
+  readonly exception?: { readonly description?: string };
+}
+interface LogEntry {
+  readonly level?: string;
+  readonly text?: string;
+  readonly url?: string;
+}
+
+/** Text of one console argument: primitives as-is, anything else as JSON. */
+function argText(arg: ConsoleArg): string {
+  const value = arg.value ?? arg.description ?? arg.unserializableValue;
+  if (value === undefined) return "";
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+/**
+ * Attach console capture to a window. Console capture goes over the debugger
+ * protocol rather than the `console-message` event: Chromium truncates that
+ * event's text at ~160 characters, which a styled Vencord log line spends
+ * entirely on CSS — the message body (the plugin name a failure can be
+ * attributed to) never survives the trip. Three event sources together
+ * cover what that event used to: JS `console.error`/`console.warn` calls,
+ * uncaught exceptions and promise rejections, and browser-originated entries
+ * (Content Security Policy refusals, network failures), each with the full
+ * text.
+ *
+ * The caller runs this before navigation (see `beforeLoad`); the attach and
+ * the domain enables wait for navigation to start because operating on a
+ * documentless target throws (or worse). That still wins the race by orders
+ * of magnitude: document-start scripts run only after the fetch, the parse,
+ * and the commit that follow this event. When the debugger cannot attach,
+ * capture falls back to the `console-message` event instead of going dark.
+ */
+export function attachSmokeCapture(win: BrowserWindow): SmokeCapture {
   // Renderer errors (including uncaught exceptions) go into the report.
   // Console errors that are by design of the bundled software are counted
-  // separately — this list stays tiny and every entry carries its reason.
+  // separately — that list stays tiny and every entry carries its reason.
   const rendererErrors: string[] = [];
   const expectedErrors = new Map<string, number>();
   const warnings = new Set<string>();
-  win.webContents.on("console-message", (details) => {
-    if (details.level === "warning") {
-      if (warnings.size < MAX_WARNINGS) {
-        warnings.add(withSource(details.message, details.sourceId));
-      }
+
+  const record = (level: "error" | "warning", message: string, sourceId: string): void => {
+    if (message.trim().length === 0) return;
+    if (level === "warning") {
+      if (warnings.size < MAX_WARNINGS) warnings.add(withSource(message, sourceId));
       return;
     }
-    if (details.level !== "error") return;
-    const expected = EXPECTED_ERRORS.find((entry) => entry.match.test(details.message));
+    const expected = EXPECTED_ERRORS.find((entry) => entry.match.test(message));
     if (expected) {
       expectedErrors.set(expected.reason, (expectedErrors.get(expected.reason) ?? 0) + 1);
       return;
@@ -105,8 +196,101 @@ export function runSmoke(
     // plugin and blaming the run. For code eval'd under a `sourceURL` that
     // is the plugin itself, and for a Content Security Policy refusal it is
     // the only clue the message has.
-    rendererErrors.push(withSource(details.message, details.sourceId));
+    rendererErrors.push(withSource(message, sourceId));
+  };
+
+  const useFallbackCapture = (): SmokeCapture => {
+    win.webContents.on("console-message", (details) => {
+      if (details.level === "warning") record("warning", details.message, details.sourceId);
+      else if (details.level === "error") record("error", details.message, details.sourceId);
+    });
+    return { rendererErrors, expectedErrors, warnings, detach: () => undefined };
+  };
+
+  // Attaching to a documentless target throws, and enabling a domain on
+  // one crashes the renderer, so the attach and the enables all wait for
+  // navigation to start. That still wins the race by orders of magnitude:
+  // document-start scripts run only after the fetch, the parse, and the
+  // commit that follow this event.
+  const detach = (): void => {
+    try {
+      win.webContents.debugger.detach();
+    } catch {
+      // Already detached (window closed); capture is over either way.
+    }
+  };
+  const onMessage = (_event: unknown, method: string, params: unknown): void => {
+    if (method === "Runtime.consoleAPICalled") {
+      const call = params as ConsoleCall;
+      const level = call.type === "error" ? "error" : call.type === "warning" ? "warning" : null;
+      if (level === null) return;
+      const message = call.args.map(argText).join(" ").trim();
+      record(level, message, call.stackTrace?.callFrames?.[0]?.url ?? "");
+      return;
+    }
+    if (method === "Runtime.exceptionThrown") {
+      const details = (params as { exceptionDetails?: ExceptionDetails }).exceptionDetails;
+      if (!details) return;
+      record(
+        "error",
+        [details.text, details.exception?.description].filter(Boolean).join(" "),
+        details.url ?? "",
+      );
+      return;
+    }
+    if (method === "Log.entryAdded") {
+      const entry = (params as { entry?: LogEntry }).entry;
+      if (!entry) return;
+      const level =
+        entry.level === "error" ? "error" : entry.level === "warning" ? "warning" : null;
+      if (level === null || !entry.text) return;
+      record(level, entry.text, entry.url ?? "");
+    }
+  };
+  win.webContents.once("did-start-loading", () => {
+    void (async () => {
+      const debug = process.env["ION_SMOKE_DEBUG"] === "1";
+      try {
+        win.webContents.debugger.attach("1.3");
+      } catch (error) {
+        if (debug) console.error(`[ion-smoke] debugger attach failed: ${String(error)}`);
+        useFallbackCapture();
+        return;
+      }
+      win.webContents.debugger.on("message", onMessage);
+      try {
+        // Both domains must be on or the capture is partial in a way that
+        // cannot be told from the outside; a failed enable falls back to
+        // the event entirely rather than mix two capture paths. Console
+        // calls and uncaught exceptions arrive over the Runtime domain,
+        // browser-side refusals over Log.
+        await win.webContents.debugger.sendCommand("Runtime.enable");
+        await win.webContents.debugger.sendCommand("Log.enable");
+        if (debug) console.error("[ion-smoke] CDP capture enabled (Runtime, Log)");
+      } catch (error) {
+        if (debug) console.error(`[ion-smoke] domain enable failed: ${String(error)}`);
+        win.webContents.debugger.removeListener("message", onMessage);
+        detach();
+        useFallbackCapture();
+      }
+    })();
   });
+  return { rendererErrors, expectedErrors, warnings, detach };
+}
+
+export function runSmoke(
+  outputDir: string,
+  win: BrowserWindow,
+  capture: SmokeCapture,
+  options: { readonly settleMs?: number | undefined } = {},
+): void {
+  mkdirSync(outputDir, { recursive: true });
+
+  const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
+  const timer = setTimeout(() => void finish("timeout"), settleMs + FALLBACK_MARGIN_MS);
+
+  const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+  const { rendererErrors, expectedErrors, warnings } = capture;
 
   /**
    * Open the user settings modal and select the Ion tab, so the report and
@@ -134,6 +318,7 @@ export function runSmoke(
 
   async function finish(reason: string): Promise<void> {
     clearTimeout(timer);
+    capture.detach();
     const contents = win.webContents;
     const probe = async (expression: string): Promise<unknown> =>
       contents.executeJavaScript(expression).catch((error: unknown): unknown => String(error));

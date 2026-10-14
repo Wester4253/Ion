@@ -15,7 +15,7 @@ import { registerIpcHandlers } from "./ipc";
 import { registerPermissionHandlers } from "./permissions";
 import { registerScreenShareHandler } from "./screenshare";
 import { parseProfileArg } from "./profile";
-import { parseSmokeArg, runSmoke } from "./smoke";
+import { attachSmokeCapture, parseSmokeArg, runSmoke } from "./smoke";
 import { ShellSettingsStore, shellSettingsPath } from "./store";
 import { createMainWindow } from "./window";
 
@@ -46,7 +46,7 @@ if (!hasLock) {
     mainWin.focus();
   });
 
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     registerPermissionHandlers();
     registerScreenShareHandler();
     // Grants the vencord.dev hosts the bundled plugins call; see csp.ts.
@@ -58,20 +58,25 @@ if (!hasLock) {
     });
 
     const smokeDir = parseSmokeArg(process.argv);
-    mainWin = createMainWindow({
+    mainWin = await createMainWindow({
       settings,
       requestQuit: () => {
         app.quit();
       },
       // Smoke runs never flash a window; it renders offscreen either way.
       hidden: smokeDir !== null,
+      // Capture attaches before the first navigation commits, so nothing
+      // the page logs at boot is lost to a debugger-enable race. Reporting
+      // only touches the page after load, so arming it here is safe.
+      beforeLoad:
+        smokeDir === null
+          ? undefined
+          : (win) => {
+              runSmoke(smokeDir, win, attachSmokeCapture(win), {
+                settleMs: parseSmokeSettleArg(process.argv) ?? undefined,
+              });
+            },
     });
-
-    if (smokeDir) {
-      runSmoke(smokeDir, mainWin, {
-        settleMs: parseSmokeSettleArg(process.argv) ?? undefined,
-      });
-    }
 
     mainWin.on("closed", () => {
       mainWin = null;

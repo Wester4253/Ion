@@ -25,9 +25,15 @@ interface WindowOptions {
   readonly requestQuit: () => void;
   /** Start with the window unmapped (smoke runs); it still renders offscreen. */
   readonly hidden?: boolean;
+  /**
+   * Runs after the window exists but before the first navigation commits,
+   * so smoke capture is attached (and its debugger domains enabled) before
+   * the page can log anything at boot.
+   */
+  readonly beforeLoad?: ((win: BrowserWindow) => void | Promise<void>) | undefined;
 }
 
-export function createMainWindow(options: WindowOptions): BrowserWindow {
+export async function createMainWindow(options: WindowOptions): Promise<BrowserWindow> {
   const { settings, requestQuit, hidden } = options;
   const displays = screen.getAllDisplays().map((display) => ({ bounds: display.bounds }));
   const state = loadWindowState(windowStatePath(), displays);
@@ -63,6 +69,7 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   // Calls stuck at "DTLS Connecting" are commonly caused by the wrong IP
   // handling policy behind VPNs; the setting is exposed so users can change it.
   win.webContents.setWebRTCIPHandlingPolicy(settings.data.webRTCIPHandlingPolicy);
+  await options.beforeLoad?.(win);
   void win.loadURL(DISCORD_APP_URL);
   return win;
 }
