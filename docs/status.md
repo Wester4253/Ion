@@ -96,12 +96,12 @@ root causes, each with a regression test:
 | The shim settled `onceReady` at discovery time, so `consoleShortcuts` eager-loaded component lazies on the login page (17 unattributed "could not find the X Component" errors)                                                                                                                                          | `onceReady` settles only on gateway `CONNECTION_OPEN`, exactly like upstream                                                                                                                              |
 | An async `start()` rejection surfaced as an anonymous unhandled rejection                                                                                                                                                                                                                                                | the adapter logs it under the plugin's name (upstream's started semantics untouched); the smoke captures full console text plus stacks over CDP instead of the 160-char-truncated `console-message` event |
 
-**Measured result** (fresh isolated profile, no login, all 180 enabled, 10 s
-fix-verification settle — **not** a Tier 2 soak; the 180 s measurement run is
-still pending): 181/181 registered, 178 started, 3 start failures, 5
+**Measured result** (fresh isolated profile, no login, all 180 enabled, 180 s
+read-only Tier 2 soak): 181/181 registered, 178 started, 3 start failures, 5
 attributed async-start rejections, 0 unattributed renderer errors
 (`runHealthy: true`). Scoreboard at [`compat.md`](./compat.md): 170 pass, 1
-warnings (CommandsAPI's own init-ordering notice), 8 fail, 1 deferred. Every
+warnings (CommandsAPI's own init-ordering notice), 8 fail, 1 deferred; tier 1
+177/3, tier 2 172/8. Every
 failure carries a one-line `diagnosis` in `acceptance.json`: 3 force modules
 the logged-out page never loads (UserSettings catalog, API Endpoints,
 WindowStore), 3 race modules that load later (FluxDispatcher,
