@@ -56,9 +56,15 @@ const CSP_GRANTS: readonly (readonly [source: string, directives: readonly strin
   ["api.betterdiscord.app", ["connect-src"]],
   // Shelter's live plugin index.
   ["shindex.uwu.network", ["connect-src"]],
-  // Codeblocks Plus Reloaded fetches shiki-es wasm/themes from jsdelivr.
-  // Currently blocked; included here so the plugin is measurable.
-  ["cdn.jsdelivr.net", ["connect-src"]],
+  // Codeblocks Plus Reloaded fetches shiki-es wasm/themes from jsdelivr,
+  // and Revert Font @imports the old-discord-font stylesheet through the
+  // same host — both measured failing without it. Stylesheets only as far
+  // as active content goes: nothing here wants jsdelivr script-src, and a
+  // code-execution grant would be an owner decision (Q9).
+  ["cdn.jsdelivr.net", ["connect-src", "style-src"]],
+  // Snazzy Shelter fetches its theme manifest from the Cumcord themes
+  // repo; the connect refusal lands on its row as an uncaught error.
+  ["cumcordthemes.github.io", ["connect-src"]],
 ];
 
 const REPORT_ONLY_HEADER = "content-security-policy-report-only";
