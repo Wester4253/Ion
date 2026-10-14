@@ -22,6 +22,27 @@ on everything unblocked; only truly blocking items stop the run.
   posture for third-party services is to stay blocked.
 - **Status**: open; USRBG measured failing with a diagnosis in the meantime.
 
+## Q9: script-src for cdn.jsdelivr.net (Pyodide), Google Fonts stay blocked
+
+- **Question**: `toki pona taso` loads Pyodide from `cdn.jsdelivr.net`
+  (script-src) to run its word lookup. Ion's grant table has never granted
+  a script-src: unlike connect/img/style, it executes third-party code
+  inside Discord's document. Grant it (consumer recorded like every other
+  row), or leave it blocked?
+- **Why it matters**: with the grant the plugin passes; without it, it is a
+  measured failure with a diagnosis. Granting widens the page's
+  attack surface beyond any current grant, so it is a posture call, not a
+  compat detail. (`fonts.googleapis.com` style-src for DiscordFeed's font
+  is the same shape but non-fatal — it stays blocked as an expected
+  refusal; say the word if you want it granted too.)
+- **Options**:
+  1. (a) Grant `cdn.jsdelivr.net` script-src, recorded in `csp.ts` and the
+     architecture table with Pyodide as the consumer.
+  2. (b) Leave it blocked; `toki pona taso` keeps its diagnosis.
+- **Recommended default**: (b) — code-execution grants should be the
+  owner's explicit call.
+- **Status**: open; blocked with a diagnosis in the meantime.
+
 ## Q1: Phases 7 and 8 are not defined in docs
 
 - **Question**: `docs/status.md` and `docs/architecture.md` do not define

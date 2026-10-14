@@ -16,11 +16,19 @@ export const SHELTER_INDEX_DIAGNOSES: Readonly<Record<string, string>> = {
   "shelter.soundboardHotkeys":
     "Calls `shelter.plugin.scoped.ui.showToast`, which upstream's `util/scopedApi.ts` never exposed — its scoped `ui` is `injectCss` only — so it fails the same way in upstream shelter; not an Ion gap.",
   "shelter.IntifaceIntegration":
-    "Now reaches its local service after the store fix, and is refused by CSP: it connects to `ws://localhost:<port>` while Discord's policy permits the same loopback only as `127.0.0.1`. An Ion gap, hidden until the plugin could get that far.",
+    "Opens `ws://localhost:12345` for the local Intiface server — the loopback is granted in CSP, but nothing is listening on the test machine; Tier 3 with Intiface running.",
   "shelter.IntifaceWebSoundboard":
-    "Same as Intiface Integration: it reaches its `ws://localhost:<port>` socket and is refused on the hostname spelling alone.",
+    "Same as Intiface Integration: `ws://localhost:6969` has no listener on the test machine; Tier 3 with the companion app running.",
+  "shelter.orbolay":
+    "Opens `ws://127.0.0.1:6888`, its default port, to the Orbolay companion app; nothing listens there on the test machine; Tier 3 with Orbolay running.",
   "shelter.Codeblocks Plus Reloaded":
-    "Loads syntax-highlighting assets from cdn.jsdelivr.net, which Discord's CSP blocks and Ion does not grant; the plugin still starts and the failure is that uncaught refusals land on its row.",
+    "Loads syntax-highlighting assets from cdn.jsdelivr.net; connect-src was granted after this failure (see the CSP table) and the plugin now passes.",
+  "shelter.snazzy-shelter":
+    "Fetches its theme manifest from cumcordthemes.github.io, which was outside Discord's connect-src until this measured failure drove the grant in `csp.ts`; re-measure expected to pass.",
+  "shelter.optimizer":
+    "The old-discord-font stylesheet on cdn.jsdelivr.net is refused by style-src (the `@import` originates in Revert Font's plugin.js); the style-src grant came from this failure — re-measure expected to pass.",
+  "shelter.toki-pona-taso":
+    "Loads Pyodide from cdn.jsdelivr.net — script-src, a code-execution grant deliberately left to the owner (QUESTIONS.md Q9) — and its ijo font from rawcdn.githack.com (font-src, refused as an expected error); the script refusal is what fails it.",
   "shelter.server-clock":
     "`onLoad` polls every 250 ms for the logged-in home button (`tutorialContainer`) before returning, so with no user it never settles and the host's 30 s lifecycle deadline fires; re-measure signed in.",
   "shelter.profile-theming":
@@ -35,6 +43,12 @@ export const SHELTER_INDEX_DIAGNOSES: Readonly<Record<string, string>> = {
     "Looks up Discord's `getSuperProperties` via the webpack chunk list and throws when absent; the login build does not register it.",
   "shelter.browser":
     "Calls `createChangelogButton` — a helper only shelter's own bundled loader passes to its components, not a `shelter` API — so its module cannot build outside shelter.",
+  "shelter.developer-options":
+    "Walks `FluxDispatcher._actionHandlers._dependencyGraph.nodes` to patch CONNECTION_OPEN handlers; on this Discord build the graph read is undefined at start (measured logged-out), so the patch aborts; Tier 3 signed-in to tell a login-build difference from a refactor.",
   "shelter.dorion-notifications":
-    'Measured only: throws parsing `"undefined"` as JSON during start. Not isolated against the plugin\'s source in this session, so no cause is claimed.',
+    "Runs only inside the Dorion (Tauri) desktop app: its config `invoke` bridge (`window.__TAURI__`/`window.Flooed`) does not exist in a browser, so the config parses as undefined; not an Ion gap.",
+  "shelter.dorion-settings":
+    "Top-level init awaits `window.__TAURI__.core.invoke` (Tauri IPC); nothing defines `__TAURI__` in a browser, so section registration rejects — a Dorion-app-only plugin, not an Ion gap.",
+  "shelter.dorion-updater":
+    '`JSON.parse(await invoke("read_config_file"))` — the Tauri IPC is absent outside the Dorion app, so the config comes back undefined; Dorion-app-only.',
 };
