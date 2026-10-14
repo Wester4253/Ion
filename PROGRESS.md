@@ -155,6 +155,8 @@ Live log for the phase-6-8 run. Updated at every commit/milestone.
 
 - Phase 10 complete: Vencord bulk acceptance **170 pass / 1 warnings / 8 fail / 1 deferred**, `runHealthy: true`, tier 1 177/3, tier 2 172/8; every failure carries a diagnosis in `acceptance.json`. Generated scoreboard: `docs/compat.md`.
 
+- Phase 7 BD bulk **honestly blocked**: live store (~215 plugins) hits a renderer scale limit at ~100-150 concurrent plugins — boot hangs deterministically, no `report.json` written. Bisect confirms no single poison plugin; smaller sets boot with per-plugin failures. The starter set (7/0/3) is the measurable scope; bulk requires architectural work (patch batching, lazy evaluation, renderer hardening).
+
 ## In progress
 
 - Owner Tier 3 hand-checks across all scoreboards (Vencord 150 items, BD, Shelter, stage-3 settings) and the open questions Q1–Q9 in `QUESTIONS.md`.
@@ -162,8 +164,9 @@ Live log for the phase-6-8 run. Updated at every commit/milestone.
 ## Next (dependency order)
 
 1. Owner Tier 3 and Q1–Q9 decisions.
-2. First real run of `.github/workflows/vencord-plugins.yml` on GitHub (cannot be executed in this environment — owner-visible in the report).
+2. Architectural decision on BD bulk: patch batching / lazy evaluation / renderer hardening — or accept starter set as the measurable scope for now.
+3. First real run of `.github/workflows/vencord-plugins.yml` on GitHub (cannot be executed in this environment — owner-visible in the report).
 
 ## Resume point
 
-- Branch `phase-6-8`, tree clean and green (typecheck, lint, 734 tests); latest measurements are the Phase 10 and Phase 8 scoreboards above (all failures recorded with diagnoses, not hidden). Everything since `ebd3115` is unpushed — the push happens at the phase milestone, never to `main`.
+- Branch `phase-6-8`, tree clean and green (typecheck, lint, 737 tests); latest measurements are the Phase 10 and Phase 8 scoreboards above (all failures recorded with diagnoses, not hidden). Phase 7 bulk is documented as blocked with root cause. Everything since `ebd3115` is unpushed — the push happens at the phase milestone, never to `main`.
