@@ -12,7 +12,7 @@ import { currentPluginScope } from "../logger";
 import type { DispatchPayload, FluxSurface, Interceptor } from "./flux";
 import type { HttpSurface, HttpResponse } from "./httpapi";
 import { createScopedApi, type ScopedApiDeps } from "./scoped";
-import { createSettingsSurface } from "./settings";
+import { createSettingsSurface, type SettingsLayoutHost } from "./settings";
 
 const SCOPE = { id: "shelter.demo", name: "Demo" };
 
@@ -80,11 +80,27 @@ function fakeHttp(): FakeHttp {
   };
 }
 
-function fakeDeps(): { deps: ScopedApiDeps; flux: FakeFlux; http: FakeHttp; warns: string[] } {
+function fakeLayout(canDraw = false): SettingsLayoutHost {
+  return {
+    draw() {
+      return canDraw;
+    },
+  };
+}
+
+function fakeDeps(canDraw = false): {
+  deps: ScopedApiDeps;
+  flux: FakeFlux;
+  http: FakeHttp;
+  warns: string[];
+} {
   const flux = fakeFlux();
   const http = fakeHttp();
   const warns: string[] = [];
-  const settings = createSettingsSurface((message) => warns.push(message));
+  const settings = createSettingsSurface({
+    layout: fakeLayout(canDraw),
+    notify: (message) => warns.push(message),
+  });
   return { deps: { flux, http, settings }, flux, http, warns };
 }
 
@@ -169,12 +185,12 @@ describe("scoped attribution", () => {
   });
 
   it("attributes a settings-section warning to whoever registered it", () => {
-    const { deps, warns } = fakeDeps();
+    const { deps, warns } = fakeDeps(false);
     const scoped = createScopedApi(deps, SCOPE);
 
     scoped.settings.registerSection(["header", "Demo"]);
 
     expect(warns).toHaveLength(1);
-    expect(warns[0]).toContain("not drawn into Discord's settings");
+    expect(warns[0]).toContain("accepted but could not be drawn");
   });
 });

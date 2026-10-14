@@ -41,6 +41,7 @@ import { createPluginsSurface } from "./plugins";
 import { createReactSurface } from "./react";
 import { createScopedApi } from "./scoped";
 import { createSettingsSurface } from "./settings";
+import { createSettingsLayoutHost } from "./settingsLayout";
 import { createUiSurface } from "./ui";
 import { createUtilSurface } from "./utilapi";
 
@@ -128,10 +129,22 @@ async function buildApi(deps: ShelterApiDeps): Promise<ShelterApiSurface> {
   }
   const flux = createFluxSurface(deps.discovery, dispatcher);
   const http = createHttpSurface(deps.discovery);
-  const settings = createSettingsSurface((message: string) => {
-    shelterLog(message, "warn");
+  // Discord's React, resolved once: the settings sections render through it,
+  // and so do the two `shelter.ui` bridges.
+  const react = createReactSurface(deps.discovery);
+  const settings = createSettingsSurface({
+    layout: createSettingsLayoutHost({
+      react,
+      doc: document,
+      warn: (message: string) => {
+        adapterLog("warn", message);
+      },
+    }),
+    notify: (message: string) => {
+      shelterLog(message, "warn");
+    },
   });
-  const ui = createUiSurface();
+  const ui = createUiSurface(react);
   const scopedDeps = { flux, http, settings };
 
   // The component library's own startup, both of them upstream's: its
@@ -170,7 +183,7 @@ async function buildApi(deps: ShelterApiDeps): Promise<ShelterApiSurface> {
     unload: (): never => {
       throw new Error("shelter.unload is not supported: the Ion host owns plugin lifecycle");
     },
-    ...createReactSurface(deps.discovery),
+    ...react,
   };
 }
 

@@ -3,23 +3,33 @@
  * The `shelter.ui` surface: what a plugin can reach, and what it cannot.
  *
  * The surface is built from `@uwu/shelter-ui`'s own export list, so the
- * checks here are about the two exclusions — upstream's four startup
- * helpers, which the adapter runs itself, and the two React↔Solid bridges
- * that are still pending — and about the library actually being compiled
- * in rather than replaced by placeholders.
+ * checks here are about the one exclusion — upstream's four startup helpers,
+ * which the adapter runs itself — and about the library actually being
+ * compiled in rather than replaced by placeholders. What the two
+ * React↔Solid bridges *do* is covered in `bridges.test.tsx`, against a
+ * stand-in for Discord's React; here they only have to be present, and to
+ * fail naming themselves when this session has no React to run them on.
  */
 
 import * as shelterUi from "@uwu/shelter-ui";
 import { describe, expect, it } from "vitest";
 
-import { createUiSurface, PENDING_BRIDGES } from "./ui";
+import type { ReactSurface } from "./react";
+import { createUiSurface } from "./ui";
 
 /** Upstream's `without(...)`: startup's own bookkeeping, not plugin API. */
 const STARTUP_ONLY = ["cleanupCss", "initToasts", "injectInternalStyles", "InternalStyles"];
 
+/** A session whose discovery resolved none of Discord's React objects. */
+const NO_REACT: ReactSurface = {
+  React: undefined,
+  ReactDOM: undefined,
+  ReactDOMClient: undefined,
+};
+
 describe("createUiSurface", () => {
   it("exposes every library export except the four startup helpers", () => {
-    const surface = createUiSurface();
+    const surface = createUiSurface(NO_REACT);
     const members = Object.keys(shelterUi);
 
     // The package really does ship them; without this the loop below would
@@ -32,7 +42,7 @@ describe("createUiSurface", () => {
   });
 
   it("hands over the compiled components, not placeholders", () => {
-    const surface = createUiSurface();
+    const surface = createUiSurface(NO_REACT);
 
     for (const member of ["showToast", "openModal", "Button", "SwitchItem", "injectCss"]) {
       expect(`${member}:${typeof surface[member]}`).toBe(`${member}:function`);
@@ -44,15 +54,21 @@ describe("createUiSurface", () => {
     expect(surface.genId).toBe(shelterUi.genId);
   });
 
-  it("keeps the two pending bridges failing by name", () => {
-    const surface = createUiSurface();
+  it("ships the two React↔Solid bridges", () => {
+    const surface = createUiSurface(NO_REACT);
 
-    for (const member of PENDING_BRIDGES) {
-      const bridge = surface[member];
-      expect(`${member}:${typeof bridge}`).toBe(`${member}:function`);
-      expect(() => {
-        (bridge as () => void)();
-      }).toThrow(`shelter.ui.${member} is not available: it is a React↔Solid bridge`);
-    }
+    expect(typeof surface.ReactInSolidBridge).toBe("function");
+    expect(typeof surface.renderSolidInReact).toBe("function");
+  });
+
+  it("fails the bridges by name when this session resolved no Discord React", () => {
+    const surface = createUiSurface(NO_REACT);
+
+    expect(() => {
+      surface.ReactInSolidBridge({ comp: () => null });
+    }).toThrow("shelter.ui.ReactInSolidBridge needs Discord's React instance");
+    expect(() => {
+      surface.renderSolidInReact(() => null);
+    }).toThrow("shelter.ui.renderSolidInReact needs Discord's React instance");
   });
 });

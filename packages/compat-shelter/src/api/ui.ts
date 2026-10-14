@@ -17,14 +17,17 @@
  *   using. The adapter runs them itself while the API is built (see
  *   `api/index.ts`).
  * - `ReactInSolidBridge` and `renderSolidInReact` are the two bridges
- *   upstream merges in from its own `src/bridges.tsx`. They need Discord's
- *   React instance and are the last piece of stage 2's settings work, so
- *   they are placeholders for now — throwing their own name and the reason,
- *   because a plugin that gets `undefined` instead would report "X is not a
- *   function", which says nothing.
+ *   upstream merges in from its own `src/bridges.tsx`. Ion ships them for
+ *   real (see `bridges.tsx`) because Discord's React instance is resolvable
+ *   through Ion's own module discovery; when a session cannot resolve it,
+ *   both still fail naming themselves rather than reporting `undefined is
+ *   not a function`, which says nothing.
  */
 
 import * as shelterUi from "@uwu/shelter-ui";
+
+import type { ReactSurface } from "./react";
+import { createBridges, type ShelterBridges } from "./bridges";
 
 /**
  * Upstream's `without(...)` exclusions. Stripped from `shelter.ui`, called
@@ -37,38 +40,6 @@ const STARTUP_ONLY = new Set<string>([
   "InternalStyles",
 ]);
 
-/** Upstream's React↔Solid bridges, not compiled in yet. */
-export const PENDING_BRIDGES = ["ReactInSolidBridge", "renderSolidInReact"] as const;
-
-/** Property reads a placeholder must answer instead of throwing. */
-const PASSTHROUGH = new Set<PropertyKey>(["name", "length", "prototype", "constructor"]);
-
-function notAvailable(member: string): never {
-  throw new Error(
-    `shelter.ui.${member} is not available: it is a React↔Solid bridge that lands with ` +
-      `Ion's settings-section support; see docs/status.md`,
-  );
-}
-
-/**
- * A placeholder that fails by name however it is used: called as a
- * component (`ReactInSolidBridge(props)`) or read as a value. Only the
- * reflection properties the runtime itself reads are answered directly, so
- * an error message can still name the value.
- */
-function placeholder(member: string): object {
-  return new Proxy(() => undefined, {
-    apply: () => notAvailable(member),
-    get: (target, property) => {
-      if (typeof property === "symbol" || PASSTHROUGH.has(property)) {
-        const reflected: unknown = Reflect.get(target, property);
-        return reflected;
-      }
-      return notAvailable(member);
-    },
-  });
-}
-
 /** Upstream's `shelter.ui.injectCss`, re-exported so there is one of them. */
 export const { injectCss } = shelterUi;
 
@@ -77,9 +48,9 @@ export const { genId } = shelterUi;
 
 /**
  * The `shelter.ui` surface: every `@uwu/shelter-ui` export except the four
- * startup helpers, plus the two pending bridges as placeholders.
+ * startup helpers, plus the two React↔Solid bridges.
  */
-export interface UiSurface {
+export interface UiSurface extends ShelterBridges {
   injectCss: typeof shelterUi.injectCss;
   genId: typeof shelterUi.genId;
   /** Opens a Solid modal; available since the library was compiled in. */
@@ -96,14 +67,11 @@ export interface UiSurface {
  * startup helpers are removed by name, and `api/ui.test.ts` checks that
  * this list and the package's exports agree.
  */
-export function createUiSurface(): UiSurface {
+export function createUiSurface(react: ReactSurface): UiSurface {
   const surface: Record<string, unknown> = {};
   for (const [member, value] of Object.entries(shelterUi)) {
     if (STARTUP_ONLY.has(member)) continue;
     surface[member] = value;
   }
-  for (const member of PENDING_BRIDGES) {
-    surface[member] = placeholder(member);
-  }
-  return surface as UiSurface;
+  return { ...surface, ...createBridges(react) } as UiSurface;
 }
