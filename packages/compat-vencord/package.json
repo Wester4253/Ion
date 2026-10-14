@@ -17,10 +17,12 @@
   "dependencies": {
     "@ion/core": "workspace:*",
     "@intrnl/xxhash64": "^0.1.2",
+    "@vap/core": "^0.0.12",
     "diff": "^9.0.0",
     "fflate": "^0.8.3",
     "gifenc": "^1.0.3",
     "nanoid": "^5.1.16",
+    "p-limit": "^7.3.3",
     "virtual-merge": "^1.0.1"
   }
 }

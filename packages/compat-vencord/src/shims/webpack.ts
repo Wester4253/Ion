@@ -153,9 +153,46 @@ export function findByCodeLazy(...code: CodeFilter): unknown {
   return proxyLazyWebpack(() => findByCode(...code));
 }
 
+interface FluxModuleLike {
+  readonly Store?: {
+    readonly getAll?: () => readonly { getName(): string }[];
+  };
+}
+
+/**
+ * Upstream's flux store registry, keyed by display name, populated the way
+ * upstream populates it: a bulk `Flux.Store.getAll()` seeded on the first
+ * lookup miss, then a write on every successful `findStore`. This is what
+ * consoleShortcuts' store listing reads back. Upstream also folds libdiscore's
+ * wasm stores into the seed; those are left to the regular by-name cache scan
+ * here instead (a `findByCode` probe would log a miss warning on Discord
+ * builds that don't ship them).
+ */
+export const fluxStores = new Map<string, unknown>();
+let fluxStoresPopulated = false;
+
+function populateFluxStoreMap(): void {
+  if (fluxStoresPopulated) return;
+  const flux = find(filters.byProps("connectStores")) as FluxModuleLike | undefined;
+  if (flux == null) return; // Discord's Flux has not loaded yet — retry on the next miss.
+  fluxStoresPopulated = true;
+  const stores = flux.Store?.getAll?.() ?? [];
+  for (const store of stores) {
+    fluxStores.set(store.getName(), store);
+  }
+}
+
 export function findStore(name: StoreNameFilter): unknown {
+  if (!fluxStores.has(name)) populateFluxStoreMap();
+  const seeded = fluxStores.get(name);
+  if (seeded !== undefined) return seeded;
+
   const res = find(filters.byStoreName(name));
-  if (res === undefined) handleModuleNotFound("findStore", name);
+  if (res === undefined) {
+    handleModuleNotFound("findStore", name);
+    return undefined;
+  }
+  fluxStores.set(name, res);
   return res;
 }
 
@@ -178,6 +215,11 @@ export function findComponentByCodeLazy(...code: CodeFilter): unknown {
   return LazyComponent(() => findComponentByCode(...code));
 }
 
+/** Upstream's `findComponentLazy`: the first component match, on demand. */
+export function findComponentLazy(filter: FilterFn): unknown {
+  return LazyComponent(() => find(filter));
+}
+
 export function findLazy(filter: FilterFn): unknown {
   return proxyLazyWebpack(() => find(filter));
 }
@@ -198,6 +240,28 @@ export function findModuleFactory(...code: CodeFilter): unknown {
 
 export function search(...code: CodeFilter): Record<string, unknown> {
   return discovery().search(...code);
+}
+
+/**
+ * Upstream's `extract`: re-evaluate one module factory under a `sourceURL`
+ * so devtools lists it as a standalone, readable file. Debug-only — it backs
+ * consoleShortcuts' `wpex`/`wpexs`, and like upstream the extracted copy is
+ * never installed as a module (breakpoints in it do nothing, which the
+ * injected banner says out loud).
+ */
+export function extract(moduleId: PropertyKey): unknown {
+  const originalFactory = wreq.m[moduleId];
+  if (typeof originalFactory !== "function") return null;
+  const code = String(originalFactory);
+  const isArrowFunction = code.startsWith("(");
+  const wrapped = "0," + (!isArrowFunction ? "function" : "") + code.slice(code.indexOf("("));
+  const source = `// [EXTRACTED] WebpackModule${String(moduleId)}
+// WARNING: This module was extracted to be more easily readable.
+//          This module is NOT ACTUALLY USED! This means putting breakpoints will have NO EFFECT!!
+
+0,${wrapped}
+//# sourceURL=file:///ExtractedWebpackModule${String(moduleId)}`;
+  return (0, eval)(source) as unknown;
 }
 
 export function waitFor(filter: FilterFn | readonly string[], listener: CallbackFn): () => void {
@@ -422,6 +486,40 @@ Object.defineProperty(wreq, "e", {
     return req.e.call(req, id);
   },
 });
+
+/**
+ * Upstream's `cache`: the primary runtime's module cache (`wreq.c`).
+ * Upstream assigns it once its chunk hook initializes; Ion captures requires
+ * as chunks arrive, so this is a live forwarding view — reads always hit the
+ * current primary cache instead of a snapshot from bundle load. It backs
+ * consoleShortcuts' `wpc` console helper.
+ */
+export const cache: Record<PropertyKey, unknown> = new Proxy<Record<PropertyKey, unknown>>(
+  {},
+  {
+    get: (_target, property) => Reflect.get(wreq.c, property),
+    has: (_target, property) => Reflect.has(wreq.c, property),
+    ownKeys: () => Reflect.ownKeys(wreq.c),
+    getOwnPropertyDescriptor: (_target, property) => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(wreq.c, property);
+      if (descriptor == null) return undefined;
+      // The proxy target stays empty, so every reported property must be
+      // configurable to satisfy the proxy invariants.
+      return { ...descriptor, configurable: true };
+    },
+  },
+);
+
+/**
+ * Upstream notifies these as webpack registers module factories, from its own
+ * chunk hook. Ion's chunk hook lives in core (it wraps factories for patching
+ * but does not fan out to the page), and the only upstream consumer —
+ * `loadLazyChunks` — is gated behind `IS_DEV` in both projects, so a
+ * production build never has a subscriber. Exported as a real Set so the
+ * vendored debug helper binds to something instead of `undefined`.
+ */
+export type FactoryListener = (factory: unknown, moduleId: PropertyKey) => void;
+export const factoryListeners = new Set<FactoryListener>();
 
 let resolveReady!: () => void;
 /** Upstream resolves its webpack-ready promise when the gateway connects. */

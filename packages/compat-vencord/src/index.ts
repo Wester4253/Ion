@@ -11,7 +11,7 @@
  * Import order is load-bearing:
  *   1. src/shims/globals — installs window.VencordNative before any vendored
  *      module evaluates (the Settings store reads it at module-eval time),
- *   2. ~plugins — evaluates the 32 plugin definitions and builds the
+ *   2. ~plugins — evaluates every compiled plugin definition and builds the
  *      name→definition registry, which Settings' defaults and translation
  *      both consume.
  * Everything after that is plain assembly: the upstream global namespace,
@@ -71,8 +71,8 @@ export function registerPluginDefinition(definition: VencordPlugin): boolean {
 }
 
 /**
- * Translate the 32 acceptance definitions into Ion plugin manifests and hand
- * them to the host. A missing host is fatal (the shell loads the bundles
+ * Translate every acceptance definition into an Ion plugin manifest and hand
+ * it to the host. A missing host is fatal (the shell loads the bundles
  * after core, so this would break every plugin, not just one).
  */
 function registerAcceptancePlugins(): void {

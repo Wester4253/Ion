@@ -83,6 +83,10 @@ function probe(target) {
     `${target}.ts`,
     `${target}.tsx`,
     `${target}.js`,
+    // ESM-style specifiers (`@utils/constants.js`) name their TS source.
+    ...(target.endsWith(".js")
+      ? [target.slice(0, -".js".length), `${target.slice(0, -".js".length)}.ts`]
+      : []),
     `${join(target, "index")}.ts`,
     `${join(target, "index")}.tsx`,
     `${join(target, "index")}.js`,
@@ -182,7 +186,36 @@ const virtualPlugin = {
 const cssPlugin = {
   name: "ion-vencord-css",
   setup: (pluginBuild) => {
-    pluginBuild.onLoad({ filter: /\.css$/ }, (args) => {
+    // `./style.css?managed` (upstream's stylePlugin): the module only
+    // registers the stylesheet in `window.VencordStyles` — upstream's
+    // @api/Styles mounts and unmounts it as the owning plugin starts and
+    // stops, which is what "managed" means.
+    pluginBuild.onResolve({ filter: /\.css\?managed$/ }, (args) => ({
+      namespace: "ion-managed-style",
+      path: resolve(args.resolveDir, args.path.split("?")[0]),
+    }));
+    pluginBuild.onLoad({ filter: /\.css$/, namespace: "ion-managed-style" }, (args) => {
+      const css = readFileSync(args.path, "utf8");
+      const name = args.path
+        .slice(vendorSrc.length + 1)
+        .split(sep)
+        .join("/");
+      return {
+        loader: "js",
+        contents: [
+          `// Mirrors upstream's scripts/build/module/style.js (GPL-3.0-or-later,\n` +
+            `// see THIRD_PARTY.md): register the source; @api/Styles owns the DOM.\n` +
+            `(window.VencordStyles ??= new Map()).set(${JSON.stringify(name)}, {`,
+          `  name: ${JSON.stringify(name)},`,
+          `  source: ${JSON.stringify(css)},`,
+          `  classNames: {},`,
+          `  dom: null,`,
+          `});`,
+          `export default ${JSON.stringify(name)};`,
+        ].join("\n"),
+      };
+    });
+    pluginBuild.onLoad({ filter: /\.css$/, namespace: "file" }, (args) => {
       const css = readFileSync(args.path, "utf8");
       const name = args.path
         .slice(vendorSrc.length + 1)
@@ -205,6 +238,41 @@ const cssPlugin = {
           `export default ${JSON.stringify(name)};`,
         ].join("\n"),
       };
+    });
+  },
+};
+
+/**
+ * `file://` raw-text imports (upstream's fileUriPlugin): quotes and code
+ * samples a plugin ships beside its sources are read verbatim into a string
+ * export. The vendor closure copies those files in; `?minify` and friends
+ * are a build-time transform Ion does not need, so they fail loudly rather
+ * than silently ship unminified text.
+ */
+const fileUriPlugin = {
+  name: "ion-vencord-file-uri",
+  setup: (pluginBuild) => {
+    pluginBuild.onResolve({ filter: /^file:\/\/.+$/ }, (args) => ({
+      namespace: "ion-file-uri",
+      path: args.path,
+      pluginData: {
+        uri: args.path,
+        path: resolve(args.resolveDir, args.path.slice("file://".length).split("?")[0]),
+      },
+    }));
+    pluginBuild.onLoad({ filter: /^file:\/\/.+$/, namespace: "ion-file-uri" }, (args) => {
+      const { uri, path } = args.pluginData;
+      const params = new URL(uri).searchParams;
+      if (params.has("minify")) {
+        return {
+          errors: [{ text: `file:// minify is not implemented: ${uri} — inline the text instead` }],
+        };
+      }
+      let content = params.has("base64")
+        ? readFileSync(path).toString("base64")
+        : readFileSync(path, "utf8");
+      if (params.get("trim") !== "false" && !params.has("base64")) content = content.trimEnd();
+      return { loader: "js", contents: `export default ${JSON.stringify(content)};` };
     });
   },
 };
@@ -413,7 +481,7 @@ const artifactPlugin = {
 const banner = `/*
  * Ion compat-vencord bundle — https://github.com/Wester4253/Ion
  *
- * Bundles the vendored Vencord sources of the 32 acceptance plugins:
+ * Bundles the vendored Vencord sources of the ${acceptance.length} acceptance plugins:
  * Vencord ${manifest.source.version} (${manifest.source.commit}),
  * Copyright (c) Vendicated and contributors, GPL-3.0-or-later.
  * Verbatim copies are pinned by vendor/vencord/MANIFEST.json; @webpack and
@@ -471,7 +539,7 @@ const options = {
   // what the harness reports did until the shell started appending
   // `ion://ion/injection.js` last (see `loadCoreBundle`). The per-plugin
   // Ion Index artifacts below keep theirs: they are evaluated on their own.
-  plugins: [aliasPlugin, virtualPlugin, cssPlugin],
+  plugins: [aliasPlugin, virtualPlugin, cssPlugin, fileUriPlugin],
 };
 
 const artifactsDir = join(packageDir, "dist", "artifacts");
@@ -501,7 +569,7 @@ function artifactOptions(entry) {
     footer: { js: `//# sourceURL=ion://index/vencord/${slug}.js` },
     // Pinned so repeated builds of unchanged sources hash identically.
     define: { ...define, BUILD_TIMESTAMP: JSON.stringify("0") },
-    plugins: [artifactPlugin, aliasPlugin, virtualPlugin, cssPlugin],
+    plugins: [artifactPlugin, aliasPlugin, virtualPlugin, cssPlugin, fileUriPlugin],
   };
 }
 

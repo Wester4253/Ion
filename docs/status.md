@@ -31,7 +31,9 @@ measured scoreboard.
 ## Phase 6 — Vencord/Equicord adapter
 
 **What runs.** `packages/compat-vencord` vendors the upstream import closure of
-32 acceptance plugins (Vencord 1.15.11 @ `16ec4ea`, 320 files, sha256-pinned in
+180 acceptance plugins (every plugin upstream's own build rules ship for a
+Vesktop-shaped renderer with `IS_DEV=false`: Vencord 1.15.11 @ `16ec4ea`,
+618 files, sha256-pinned in
 `vendor/vencord/MANIFEST.json`, license texts included, `tools/vendor.mjs --check`
 enforced), translates each definition into an Ion plugin manifest (upstream's
 `startAt` → Ion stages, implicit API dependencies, `$self` binding), and ships as
