@@ -29,6 +29,15 @@ function isIndexable(value: unknown): value is Record<string, unknown> {
   return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 
+/** Checks `key in obj` without running a throwing getter. */
+function hasOwnSafe(obj: unknown, key: string): boolean {
+  try {
+    return key in (obj as Record<string, unknown>);
+  } catch {
+    return false;
+  }
+}
+
 function defaultOf(exports: unknown): unknown {
   return (exports as { default?: unknown } | null | undefined)?.default;
 }
@@ -76,7 +85,7 @@ export function byKeys(
       const component = filter(exports);
       if (!isIndexable(component)) return false;
       for (const prop of props) {
-        if (!(prop in component)) return false;
+        if (!hasOwnSafe(component, prop)) return false;
       }
       return true;
     },
@@ -95,10 +104,15 @@ export function byPrototypeKeys(
       const component = filter(exports);
       if (!component) return false;
       if (!isIndexable(component)) return false;
-      const prototype: unknown = component["prototype"];
+      let prototype: unknown;
+      try {
+        prototype = component["prototype"];
+      } catch {
+        return false;
+      }
       if (!isIndexable(prototype)) return false;
       for (const field of fields) {
-        if (!(field in prototype)) return false;
+        if (!hasOwnSafe(prototype, field)) return false;
       }
       return true;
     },

@@ -85,15 +85,17 @@ function resolveLazy(value: () => unknown): unknown {
  * constructor". When no property is a lazy getter the original object is
  * returned unchanged, preserving reference identity for the common case.
  */
-function resolveExports(exports: object): object {
+function resolveExports(exports: object): object | undefined {
   // Spread first: it invokes accessor properties once, so a getter that
   // returns a lazy resolver surfaces as a plain arrow value in the copy.
-  // A throwing getter aborts the spread — fall back to the original.
+  // A throwing getter (Discord's module internals sometimes have TDZ on
+  // their webpack $/e variables) means the module isn't ready — return
+  // undefined so the search treats it as a miss.
   let copy: Record<string, unknown>;
   try {
     copy = { ...(exports as Record<string, unknown>) };
   } catch {
-    return exports;
+    return undefined;
   }
   let changed = false;
   for (const key of Object.keys(copy)) {
@@ -114,6 +116,14 @@ function resolveExports(exports: object): object {
  * the default-export key or every key, with raw/withKey/map shaping the
  * returned value. Returns undefined when nothing matched.
  */
+function safeKeys(obj: object): string[] {
+  try {
+    return Object.keys(obj);
+  } catch {
+    return [];
+  }
+}
+
 export function getMatched(
   module: BdModule,
   filter: ModuleFilter,
@@ -134,7 +144,9 @@ export function getMatched(
     if (map) return mapObject(module.exports as object, map);
     if (raw) return module;
     if (withKey) return [module, "exports"];
-    return resolveExports(module.exports as object);
+    const resolved = resolveExports(module.exports as object);
+    if (resolved === undefined) return undefined; // module not ready (TDZ accessors)
+    return resolved;
   }
 
   if (!searchExports && !searchDefault) return undefined;
@@ -142,14 +154,19 @@ export function getMatched(
   let defaultKey: string | undefined;
   const searchKeys: string[] = [];
   if (searchExports) {
-    searchKeys.push(...Object.keys(module.exports as object));
+    searchKeys.push(...safeKeys(module.exports as object));
   } else if (searchDefault && (defaultKey = getDefaultKey(module))) {
     searchKeys.push(defaultKey);
   }
 
   const values = module.exports as Record<string, unknown>;
   for (const key of searchKeys) {
-    const exported = values[key];
+    let exported: unknown;
+    try {
+      exported = values[key];
+    } catch {
+      continue;
+    }
     if (shouldSkipModule(exported)) continue;
     if (filter(exported, module, module.id)) {
       if (map) return mapObject((raw ? module.exports : exported) as object, map);
