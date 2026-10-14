@@ -64,6 +64,29 @@ describe("analyze", () => {
     expect(report.summary.fail).toBe(2);
   });
 
+  test("resolves a space-named entry to the adapter's underscored id", () => {
+    // The vencord adapter replaces whitespace runs in plugin names with
+    // underscores when it registers them; a name like
+    // "WebRichPresence (arRPC)" must still find its recorded state.
+    const acceptance: readonly AcceptanceEntry[] = [
+      { group: "D", folder: "arRPC.web", name: "WebRichPresence (arRPC)" },
+    ];
+    const report = analyze(
+      {
+        ...OK,
+        pluginsStatus: {
+          status: { registered: 1, started: 1, failed: 0 },
+          ids: ["WebRichPresence_(arRPC):started"],
+          failures: [],
+        },
+      },
+      acceptance,
+      OPTIONS,
+    );
+    expect(plugin(report, "WebRichPresence (arRPC)").tier1).toBe("pass");
+    expect(report.summary.fail).toBe(0);
+  });
+
   test("fails a plugin whose start threw, with its error as the reason", () => {
     const report = analyze(
       {

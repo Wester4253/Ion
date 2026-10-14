@@ -212,15 +212,28 @@ function shelterOrigin(id: string | undefined): string | undefined {
 }
 
 /** Patterns that identify a message as belonging to `name`. */
+/** Escape a plugin name for use inside a RegExp (names carry parens). */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function isAttributedTo(message: string, name: string, origin?: string): boolean {
   // BdApi's logger prints `%c[Name]%c` with console style arguments; if the
   // format specifiers survive into the captured text, drop them before
   // matching (a no-op for already-formatted messages).
   const text = message.replaceAll("%c", "");
+  const escaped = escapeRegExp(name);
   return (
     text.startsWith(`[${name}]`) ||
     text.startsWith(`${name}:`) ||
-    new RegExp(`\\bplugin ${name}\\b`).test(text) ||
+    // Upstream's own log shapes, searched anywhere in the message because
+    // Vencord's logger prefixes every line with its styled header: the
+    // PluginManager's per-plugin failure line, and the convention of
+    // leading a message with the plugin's name (which the adapter's
+    // attributed async-start rejections follow).
+    new RegExp(`\\bplugin ${escaped}\\b`).test(text) ||
+    new RegExp(`\\bFailed to start ${escaped}\\b`).test(text) ||
+    new RegExp(`\\b${escaped}:`).test(text) ||
     // …or the message says where it came from. Stronger than any phrasing:
     // an error raised under a plugin's own `sourceURL` could not have been
     // produced anywhere else, and a Content Security Policy refusal often
@@ -271,8 +284,17 @@ export function analyze(
   // What the host registered an entry under, when it registered at all.
   // Prefer it over the catalog's own name: the adapter is the thing that
   // decided, and its answer is what the plugin's console label carries.
+  //
+  // The host keys state by id. Entries that name one explicitly
+  // (BetterDiscord's `bd.<name>`, Shelter origins) use it as-is; the
+  // vencord adapter derives its id from the plugin name with runs of
+  // whitespace replaced by underscores (see compat-vencord's translate.ts),
+  // so an acceptance name like "WebRichPresence (arRPC)" must be normalized
+  // the same way to find the state the run recorded under it.
+  const hostIdOf = (entry: AcceptanceEntry): string => entry.id ?? entry.name.replace(/\s+/g, "_");
+
   const displayNameOf = (entry: AcceptanceEntry): string =>
-    registeredNames[entry.id ?? entry.name] ?? entry.name;
+    registeredNames[hostIdOf(entry)] ?? entry.name;
 
   // Renderer errors are attributed once for the whole run; leftovers become
   // run-level failures (never silently dropped).
@@ -293,9 +315,7 @@ export function analyze(
   const plugins: CompatPluginReport[] = [];
 
   for (const entry of acceptance) {
-    // The host keys plugin state by its id; for BetterDiscord plugins that
-    // is `bd.<name>` (recorded as `id` in the acceptance entry).
-    const hostId = entry.id ?? entry.name;
+    const hostId = hostIdOf(entry);
     const name = displayNameOf(entry);
     const origin = shelterOrigin(entry.id);
     const [pluginWarnings, leftover] = partitionAttributed(unattributedWarnings, name, origin);
