@@ -12,7 +12,7 @@
  */
 
 import { contextBridge, ipcRenderer, webFrame } from "electron";
-import type { ShellFileApi, ShellHost, ShellSettingsApi } from "@ion/core";
+import type { ShellFileApi, ShellHost, ShellSettingsApi, ShellFetchApi } from "@ion/core";
 
 import { createNodeRequire, type RequireTransport } from "./nodeRequire";
 import { IPC, type FsChange, type FsResult, type ShellInfo } from "../shared/ipc";
@@ -108,6 +108,57 @@ const transport: RequireTransport = {
   },
 };
 
+/** The `ion:fetch-url` reply shape, defensively parsed off the IPC boundary. */
+interface FetchReply {
+  readonly ok: boolean;
+  readonly status?: number;
+  readonly statusText?: string;
+  readonly headers?: Record<string, string>;
+  readonly text?: string;
+  readonly error?: string;
+}
+
+function parseFetchReply(reply: unknown): FetchReply | null {
+  if (typeof reply !== "object" || reply === null) return null;
+  const record = reply as Record<string, unknown>;
+  // Optional fields are set only when present: `exactOptionalPropertyTypes`
+  // rejects assigning `undefined` to an optional property outright, and the
+  // mapped type drops `readonly` so the fields can be assigned one by one.
+  const result: FetchReply = {
+    ok: record["ok"] === true,
+    ...(typeof record["status"] === "number" ? { status: record["status"] } : {}),
+    ...(typeof record["statusText"] === "string" ? { statusText: record["statusText"] } : {}),
+    ...(typeof record["text"] === "string" ? { text: record["text"] } : {}),
+    ...(typeof record["error"] === "string" ? { error: record["error"] } : {}),
+    ...(typeof record["headers"] === "object" && record["headers"] !== null
+      ? { headers: record["headers"] as Record<string, string> }
+      : {}),
+  };
+  return result;
+}
+
+const fetchApi: ShellFetchApi = {
+  async fetch(url, options) {
+    const reply: unknown = await ipcRenderer.invoke(IPC.fetchUrl, {
+      url,
+      options: options ?? {},
+    });
+    const result = parseFetchReply(reply);
+    if (result?.ok !== true) {
+      const status = result?.status ?? "unknown";
+      const message =
+        result?.error ?? result?.statusText ?? `fetch failed (status ${String(status)})`;
+      throw new Error(message);
+    }
+    const init: ResponseInit = {
+      status: result.status ?? 200,
+      statusText: result.statusText ?? "OK",
+    };
+    if (result.headers !== undefined) init.headers = result.headers;
+    return new Response(result.text ?? "", init);
+  },
+};
+
 const host: ShellHost = {
   kind: "desktop",
   appVersion,
@@ -117,6 +168,7 @@ const host: ShellHost = {
   },
   settings,
   files,
+  fetch: fetchApi,
   nodeRequire: createNodeRequire(transport, process.platform),
 };
 

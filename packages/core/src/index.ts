@@ -14,7 +14,13 @@ import { registerBundledPlugins } from "./bundledPlugins";
 import { mountDebugPanel, updatePluginStatus, updateWebpackStatus } from "./debugPanel";
 import { proxyLazy } from "./lazy";
 import { createPluginHost } from "./plugins";
-import type { IonDiscoveryApi, IonGlobal, IonWebpackStatus, ShellFileApi } from "./platform/shell";
+import type {
+  IonDiscoveryApi,
+  IonGlobal,
+  IonWebpackStatus,
+  ShellFileApi,
+  ShellFetchApi,
+} from "./platform/shell";
 import { createSettingsStore } from "./settings";
 import { domStorage } from "./storage";
 import { createThemeStore, syncThemeDirectory, watchThemesDir } from "./themes";
@@ -39,6 +45,7 @@ import {
   waitFor,
 } from "./webpack";
 import { filters } from "./webpack/filters";
+import { downloadEntry, fetchCatalog, fetchSource, stageFile } from "./catalog";
 
 export type {
   FileEncoding,
@@ -57,12 +64,15 @@ export type {
   IonThemesApi,
   IonUiApi,
   IonWebpackStatus,
+  ShellFetchApi,
   ShellFileApi,
   ShellHost,
   ShellKind,
   ShellRequire,
   ShellSettingsApi,
+  IonCatalogApi,
 } from "./platform/shell";
+export type { CatalogEntry, CatalogFile, CatalogSource, StageResult } from "./catalog";
 
 export type { CacheEntry, ModuleFactory, WebpackRequire } from "./webpack/types";
 export { createPluginHost, type PluginHost } from "./plugins";
@@ -141,10 +151,48 @@ const UNAVAILABLE_FILES: ShellFileApi = {
   },
 };
 
+const UNAVAILABLE_FETCH: ShellFetchApi = {
+  fetch() {
+    return Promise.reject(new Error("shell bridge unavailable"));
+  },
+};
+
 const state: IonGlobal = {
   version: window.ionShell?.appVersion ?? "unknown",
   startedAt: performance.now(),
   storage: domStorage,
+  fetch: window.ionShell?.fetch ?? UNAVAILABLE_FETCH,
+  catalog: {
+    fetchAll: () =>
+      fetchCatalog({
+        fetch: window.ionShell?.fetch ?? UNAVAILABLE_FETCH,
+        files: window.ionShell?.files ?? UNAVAILABLE_FILES,
+      }),
+    fetchSource: (source) =>
+      fetchSource(
+        {
+          fetch: window.ionShell?.fetch ?? UNAVAILABLE_FETCH,
+          files: window.ionShell?.files ?? UNAVAILABLE_FILES,
+        },
+        source,
+      ),
+    download: (entry) =>
+      downloadEntry(
+        {
+          fetch: window.ionShell?.fetch ?? UNAVAILABLE_FETCH,
+          files: window.ionShell?.files ?? UNAVAILABLE_FILES,
+        },
+        entry,
+      ),
+    stage: (file) =>
+      stageFile(
+        {
+          fetch: window.ionShell?.fetch ?? UNAVAILABLE_FETCH,
+          files: window.ionShell?.files ?? UNAVAILABLE_FILES,
+        },
+        file,
+      ),
+  },
 };
 
 window.__ION__ = state;

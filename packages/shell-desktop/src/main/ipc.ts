@@ -14,7 +14,7 @@ import type { FSWatcher } from "node:fs";
 import { dirname, posix } from "node:path";
 
 import { loadCoreBundle } from "./bundle";
-import { isAllowedExternalUrl, isAllowedNavigation } from "./navigation";
+import { isAllowedExternalUrl, isAllowedFetchUrl, isAllowedNavigation } from "./navigation";
 import { resolveScopedPath } from "./pathScope";
 import { applyShellSettingsPatch, isShellSettingKey } from "./settingsSchema";
 import { shellDataDir, type ShellSettingsStore } from "./store";
@@ -303,5 +303,39 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (!patched) return false;
     settings.set(key, patched[key]);
     return true;
+  });
+
+  /** Fetch a URL through the main process (bypasses page CSP/CORS). */
+  ipcMain.handle(IPC.fetchUrl, async (event, raw: unknown) => {
+    if (!senderIsTrusted(event)) return null;
+    if (!isRecord(raw)) return null;
+    const url = typeof raw["url"] === "string" ? raw["url"] : null;
+    const rawOptions = raw["options"];
+    const options: Record<string, unknown> = isRecord(rawOptions) ? rawOptions : {};
+    if (url === null || !isAllowedFetchUrl(url)) return null;
+    try {
+      // Built field by field: `exactOptionalPropertyTypes` rejects assigning
+      // `undefined` to an optional property, so each one is set only when the
+      // caller actually sent it.
+      const init: RequestInit = {
+        method: typeof options["method"] === "string" ? options["method"] : "GET",
+      };
+      if (isRecord(options["headers"])) init.headers = options["headers"] as Record<string, string>;
+      if (typeof options["body"] === "string") init.body = options["body"];
+      if (typeof options["redirect"] === "string")
+        init.redirect = options["redirect"] as "follow" | "error" | "manual";
+      // URL is already validated by the caller; main process fetch has no CSP/CORS
+      const res = await fetch(url, init);
+      if (!res.ok) return { ok: false, status: res.status, statusText: res.statusText };
+      const text = await res.text();
+      return {
+        ok: true,
+        status: res.status,
+        headers: Object.fromEntries(res.headers.entries()),
+        text,
+      };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 }

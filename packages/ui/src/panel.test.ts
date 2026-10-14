@@ -88,6 +88,12 @@ function renderPanel(overrides: Partial<PanelPorts> = {}): Harness {
       store: true,
     }),
     openExternal: () => Promise.resolve(),
+    catalog: {
+      fetchAll: () => Promise.resolve([]),
+      fetchSource: () => Promise.resolve([]),
+      download: () => Promise.reject(new Error("not implemented in test")),
+      stage: () => Promise.resolve({ ok: false, error: "not implemented in test" }),
+    },
     ...overrides,
   };
   const host = document.createElement("ion-settings-panel");
@@ -157,8 +163,8 @@ describe("mountPanel", () => {
     const { shadow, unmount } = renderPanel();
     await flush();
     const titles = [...shadow.querySelectorAll(".ion-section-title")].map((h) => h.textContent);
-    expect(titles).toEqual(["Plugins", "App", "About"]);
-    expect(shadow.querySelectorAll(".ion-divider")).toHaveLength(2);
+    expect(titles).toEqual(["Plugins", "Catalog", "App", "About"]);
+    expect(shadow.querySelectorAll(".ion-divider")).toHaveLength(3);
     expect(shadow.querySelector(".ion-card")).toBeNull(); // no legacy cards
     unmount();
   });

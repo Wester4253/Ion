@@ -35,6 +35,8 @@ export const IPC = {
   fsUnwatch: "ion:fs:unwatch",
   /** main → renderer: the files that changed under a subscribed path. */
   fsChanged: "ion:fs:changed",
+  /** invoke: fetch a URL through the main process (bypasses page CSP/CORS). */
+  fetchUrl: "ion:fetch-url",
 } as const;
 
 export type IonChannel = (typeof IPC)[keyof typeof IPC];

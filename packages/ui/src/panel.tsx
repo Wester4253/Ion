@@ -1,6 +1,14 @@
 import { h, render, type ComponentChildren, type VNode } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { IonPluginInfo, IonPluginsApi, IonWebpackStatus, ShellSettingsApi } from "@ion/core";
+import type {
+  IonPluginInfo,
+  IonPluginsApi,
+  IonWebpackStatus,
+  ShellSettingsApi,
+  CatalogEntry,
+  CatalogFile,
+  StageResult,
+} from "@ion/core";
 import { PANEL_CSS } from "./styles";
 
 export interface PanelPorts {
@@ -12,6 +20,13 @@ export interface PanelPorts {
   readonly shellVersion: string;
   readonly webpackStatus: () => IonWebpackStatus | undefined;
   readonly openExternal: (url: string) => Promise<void>;
+  /** Catalog API for browsing and installing plugins/themes. */
+  readonly catalog: {
+    fetchAll(): Promise<readonly CatalogEntry[]>;
+    fetchSource(source: string): Promise<readonly CatalogEntry[]>;
+    download(entry: CatalogEntry): Promise<CatalogFile>;
+    stage(file: CatalogFile): Promise<StageResult>;
+  };
 }
 
 interface PanelProps {
@@ -391,6 +406,109 @@ function PluginsSection({ ports }: PanelProps): VNode {
   );
 }
 
+function CatalogSection({ ports }: PanelProps): VNode {
+  const [entries, setEntries] = useState<readonly CatalogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    ports.catalog
+      .fetchAll()
+      .then((result) => {
+        if (!cancelled) setEntries(result);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ports]);
+
+  const install = (entry: CatalogEntry): void => {
+    setInstalling(entry.id);
+    setInstallError(null);
+    ports.catalog
+      .download(entry)
+      .then((file) => ports.catalog.stage(file))
+      .then((result) => {
+        if (!result.ok) {
+          setInstallError(`${entry.name}: ${result.error}`);
+        }
+      })
+      .catch((err: unknown) => {
+        setInstallError(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+      })
+      .finally(() => {
+        setInstalling(null);
+      });
+  };
+
+  const filtered = filter
+    ? entries.filter(
+        (e) =>
+          e.name.toLowerCase().includes(filter.toLowerCase()) ||
+          e.author.toLowerCase().includes(filter.toLowerCase()),
+      )
+    : entries;
+
+  if (loading) return <div class="ion-empty">Loading catalog…</div>;
+  if (error) return <div class="ion-row-error ion-empty">{error}</div>;
+  if (entries.length === 0) return <div class="ion-empty">No catalog entries found.</div>;
+
+  return (
+    <>
+      <div class="ion-catalog-search">
+        <input
+          type="text"
+          class="ion-catalog-input"
+          placeholder="Search plugins and themes…"
+          value={filter}
+          onInput={(e) => {
+            setFilter((e.target as HTMLInputElement).value);
+          }}
+        />
+      </div>
+      {filtered.map((entry) => (
+        <div key={entry.id} class="ion-catalog-item">
+          <div class="ion-catalog-info">
+            <span class="ion-catalog-name">{entry.name}</span>
+            <span class="ion-catalog-meta">
+              by {entry.author}
+              {entry.version ? ` · v${entry.version}` : ""} · {entry.ecosystem}
+            </span>
+            {entry.description && <span class="ion-catalog-desc">{entry.description}</span>}
+          </div>
+          <button
+            class="ion-catalog-install"
+            disabled={installing === entry.id}
+            onClick={() => {
+              install(entry);
+            }}
+          >
+            {installing === entry.id ? "Installing…" : "Install"}
+          </button>
+        </div>
+      ))}
+      {installError && <div class="ion-row-error ion-empty">{installError}</div>}
+      <div class="ion-catalog-note">
+        Plugins are staged and will be available after restarting Ion.
+      </div>
+    </>
+  );
+}
+
 interface AppSettingRow {
   readonly key: string;
   readonly label: string;
@@ -600,6 +718,10 @@ function Panel({ ports }: PanelProps): VNode {
       <h1 class="ion-heading">Ion</h1>
       <Section title="Plugins">
         <PluginsSection ports={ports} />
+      </Section>
+      <hr class="ion-divider" />
+      <Section title="Catalog">
+        <CatalogSection ports={ports} />
       </Section>
       <hr class="ion-divider" />
       <Section title="App">

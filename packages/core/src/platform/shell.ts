@@ -17,6 +17,7 @@ import type { PluginSettings } from "../settings";
 import type { DomStorage } from "../storage";
 import type { CodeFilter, ModuleFilter } from "../webpack/filters";
 import type { ModuleFactory, WebpackRequire } from "../webpack/types";
+import type { CatalogEntry, CatalogFile, CatalogSource, StageResult } from "../catalog";
 
 export type ShellKind = "desktop" | "android";
 
@@ -64,6 +65,12 @@ export interface ShellFileApi {
  */
 export type ShellRequire = (id: string) => unknown;
 
+/** Fetch through the main process (bypasses page CSP/CORS). */
+export interface ShellFetchApi {
+  /** Fetches a URL and returns a standard Response. Throws on network errors or non-OK status. */
+  fetch(url: string, options?: RequestInit): Promise<Response>;
+}
+
 export interface ShellHost {
   readonly kind: ShellKind;
   readonly appVersion: string;
@@ -76,6 +83,7 @@ export interface ShellHost {
 
   readonly settings: ShellSettingsApi;
   readonly files: ShellFileApi;
+  readonly fetch: ShellFetchApi;
   readonly nodeRequire: ShellRequire;
 }
 
@@ -339,7 +347,23 @@ export interface IonGlobal {
    * persist through this instead of the window property the page deletes.
    */
   storage: DomStorage;
+  /** Fetch through the main process (bypasses page CSP/CORS). */
+  readonly fetch: ShellFetchApi;
+  /** The catalog client: fetch, download, and stage plugins/themes from remote sources. */
+  readonly catalog: IonCatalogApi;
   ui?: IonUiApi;
+}
+
+/** The catalog surface exposed as `window.__ION__.catalog`. */
+export interface IonCatalogApi {
+  /** Fetch all entries from all sources. */
+  fetchAll(): Promise<readonly CatalogEntry[]>;
+  /** Fetch entries from a single source. */
+  fetchSource(source: CatalogSource): Promise<readonly CatalogEntry[]>;
+  /** Download and hash-verify a catalog entry. */
+  download(entry: CatalogEntry): Promise<CatalogFile>;
+  /** Stage a downloaded file into the adapter's staging directory. */
+  stage(file: CatalogFile): Promise<StageResult>;
 }
 
 declare global {

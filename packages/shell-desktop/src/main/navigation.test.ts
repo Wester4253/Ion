@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { isAllowedExternalUrl, isAllowedNavigation } from "./navigation";
+import { isAllowedExternalUrl, isAllowedFetchUrl, isAllowedNavigation } from "./navigation";
 
 describe("isAllowedNavigation", () => {
   test("allows first-party Discord documents", () => {
@@ -43,5 +43,25 @@ describe("isAllowedExternalUrl", () => {
     expect(isAllowedExternalUrl("javascript:alert(1)")).toBe(false);
     expect(isAllowedExternalUrl("smb://host/share")).toBe(false);
     expect(isAllowedExternalUrl("not a url")).toBe(false);
+  });
+});
+
+describe("isAllowedFetchUrl", () => {
+  test("allows the catalog hosts", () => {
+    expect(isAllowedFetchUrl("https://api.betterdiscord.app/v1/store/addons")).toBe(true);
+    expect(isAllowedFetchUrl("https://shindex.uwu.network/data")).toBe(true);
+    expect(isAllowedFetchUrl("https://raw.githubusercontent.com/user/repo/main/index.json")).toBe(
+      true,
+    );
+    expect(isAllowedFetchUrl("https://userpfp.github.io/data.json")).toBe(true);
+    expect(isAllowedFetchUrl("https://cdn.jsdelivr.net/npm/shiki-es@0.2.0/onig.wasm")).toBe(true);
+  });
+
+  test("rejects hosts outside the table", () => {
+    expect(isAllowedFetchUrl("https://evil.example/data.json")).toBe(false);
+    expect(isAllowedFetchUrl("https://api.betterdiscord.app.evil.example/data")).toBe(false);
+    expect(isAllowedFetchUrl("https://github.com/user/repo")).toBe(false);
+    expect(isAllowedFetchUrl("http://shindex.uwu.network/data")).toBe(false);
+    expect(isAllowedFetchUrl("not a url")).toBe(false);
   });
 });

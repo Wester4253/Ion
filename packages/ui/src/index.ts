@@ -30,6 +30,13 @@ function start(): void {
         shellVersion: shell.appVersion,
         webpackStatus: () => ion.webpack,
         openExternal: (url) => shell.openExternal(url),
+        catalog: {
+          fetchAll: () => ion.catalog.fetchAll(),
+          fetchSource: (source) =>
+            ion.catalog.fetchSource(source as "betterdiscord" | "shelter-index" | "ion-index"),
+          download: (entry) => ion.catalog.download(entry),
+          stage: (file) => ion.catalog.stage(file),
+        },
       }),
   });
   // Only claim readiness once the integration actually started.

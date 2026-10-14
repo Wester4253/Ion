@@ -51,6 +51,14 @@ const CSP_GRANTS: readonly (readonly [source: string, directives: readonly strin
   // spelling alone — the same machine either way.
   ["ws://localhost:*", ["connect-src"]],
   ["http://localhost:*", ["connect-src"]],
+  // Catalog sources (Phase 9):
+  // BetterDiscord's public plugin/theme listing API.
+  ["api.betterdiscord.app", ["connect-src"]],
+  // Shelter's live plugin index.
+  ["shindex.uwu.network", ["connect-src"]],
+  // Codeblocks Plus Reloaded fetches shiki-es wasm/themes from jsdelivr.
+  // Currently blocked; included here so the plugin is measurable.
+  ["cdn.jsdelivr.net", ["connect-src"]],
 ];
 
 const REPORT_ONLY_HEADER = "content-security-policy-report-only";

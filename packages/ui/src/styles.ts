@@ -256,4 +256,98 @@ export const PANEL_CSS = `
   outline: 2px solid var(--border-focus, #6aa8f4);
   outline-offset: 2px;
 }
+
+/* Catalog: search input, entry list, and install button. */
+.ion-catalog-search {
+  margin-bottom: 12px;
+}
+.ion-catalog-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle, rgba(151, 151, 159, 0.2));
+  border-radius: var(--radius-sm, 8px);
+  background: var(--background-mod-muted, rgba(151, 151, 159, 0.08));
+  color: var(--text-default, #d4d5d8);
+  font: inherit;
+  font-size: 16px;
+  line-height: 20px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.ion-catalog-input::placeholder {
+  color: var(--text-subtle, #96979e);
+}
+.ion-catalog-input:focus {
+  border-color: var(--border-focus, #6aa8f4);
+}
+.ion-catalog-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle, rgba(151, 151, 159, 0.12));
+}
+.ion-catalog-item:last-of-type {
+  border-bottom: none;
+}
+.ion-catalog-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.ion-catalog-name {
+  font-size: 16px;
+  font-weight: var(--font-weight-medium, 500);
+  line-height: 20px;
+  color: var(--text-strong, #dcdcdf);
+}
+.ion-catalog-meta {
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--text-subtle, #96979e);
+}
+.ion-catalog-desc {
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--text-default, #d4d5d8);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ion-catalog-install {
+  flex: none;
+  height: 32px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--brand-500, #5865f2);
+  color: var(--white-500, #ffffff);
+  font: inherit;
+  font-size: 14px;
+  font-weight: var(--font-weight-medium, 500);
+  line-height: 18px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.ion-catalog-install:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-500, #5865f2) 80%, rgb(0 0 0));
+}
+.ion-catalog-install:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ion-catalog-install:focus-visible {
+  outline: 2px solid var(--border-focus, #6aa8f4);
+  outline-offset: 2px;
+}
+.ion-catalog-note {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--text-subtle, #96979e);
+}
 `;
