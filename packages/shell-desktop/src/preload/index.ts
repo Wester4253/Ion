@@ -174,6 +174,17 @@ const host: ShellHost = {
 
 contextBridge.exposeInMainWorld("ionShell", host);
 
+// Discord's desktop client defines window.DiscordNative; Ion provides the
+// content-protection subset so plugins that gate on it (Content Protection
+// Always) work the same way. Only setContentProtection is exposed — the
+// rest of Discord's native surface stays out of the page.
+contextBridge.exposeInMainWorld("DiscordNative", {
+  window: {
+    setContentProtection: (enabled: boolean): boolean =>
+      ipcRenderer.sendSync(IPC.contentProtection, enabled) === true,
+  },
+});
+
 // Inject the core bundle into the main world before Discord's first script.
 // The harness seed must land first: the compat bundle's Vencord settings
 // store reads this key synchronously when it evaluates during injection.

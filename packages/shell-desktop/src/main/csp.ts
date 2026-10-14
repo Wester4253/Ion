@@ -67,6 +67,11 @@ const CSP_GRANTS: readonly (readonly [source: string, directives: readonly strin
   // Snazzy Shelter fetches its theme manifest from the Cumcord themes
   // repo; the connect refusal lands on its row as an uncaught error.
   ["cumcordthemes.github.io", ["connect-src"]],
+  // USRBG fetches user banners from its API at startup; the fetch
+  // rejection lands on its row as an uncaught error (measured in the
+  // Vencord bulk sweep: "USRBG: async start() rejected TypeError:
+  // Failed to fetch"). Data only — no script, style, or media.
+  ["usrbg.is-hardly.online", ["connect-src"]],
 ];
 
 const REPORT_ONLY_HEADER = "content-security-policy-report-only";

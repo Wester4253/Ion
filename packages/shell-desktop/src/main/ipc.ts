@@ -8,7 +8,7 @@
  * - filesystem access is confined to the Ion data directory.
  */
 
-import { app, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { existsSync, mkdirSync, readFileSync, readdirSync, watch, writeFileSync } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import { dirname, posix } from "node:path";
@@ -129,6 +129,24 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.on(IPC.shellInfo, (event) => {
     const info: ShellInfo = { kind: "desktop", appVersion: app.getVersion() };
     event.returnValue = senderIsTrusted(event) ? info : null;
+  });
+
+  // Discord's desktop client exposes window.DiscordNative; Ion provides the
+  // content-protection subset backed by Electron's own API. Synchronous so
+  // plugins can call it during startup like they do under Discord.
+  ipcMain.on(IPC.contentProtection, (event, raw) => {
+    if (!senderIsTrusted(event)) {
+      event.returnValue = false;
+      return;
+    }
+    const enabled = raw === true;
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) {
+      event.returnValue = false;
+      return;
+    }
+    window.setContentProtection(enabled);
+    event.returnValue = true;
   });
 
   ipcMain.on(IPC.fsRead, (event, raw) => {

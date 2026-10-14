@@ -42,6 +42,9 @@ vi.mock("electron", () => ({
     getPath: () => electronState.userData,
     getVersion: () => "0.0.0-test",
   },
+  BrowserWindow: {
+    fromWebContents: () => null,
+  },
   ipcMain: {
     on: (channel: string, handler: IpcHandler) => {
       handlers.set(channel, handler);
@@ -149,5 +152,22 @@ describe("filesystem IPC", () => {
     };
     handler(event, { path: "bd/plugins/Test.plugin.js", encoding: "utf8" });
     expect(event.returnValue).toEqual({ ok: false, error: "untrusted sender" });
+  });
+});
+
+describe("content protection IPC", () => {
+  it("answers false when no window owns the sender", () => {
+    expect(invoke(IPC.contentProtection, true)).toBe(false);
+  });
+
+  it("refuses untrusted senders", () => {
+    const handler = handlers.get(IPC.contentProtection);
+    if (!handler) throw new Error("no contentProtection handler");
+    const event: IpcEvent = {
+      senderFrame: { url: "https://evil.example/" },
+      returnValue: undefined,
+    };
+    handler(event, true);
+    expect(event.returnValue).toBe(false);
   });
 });

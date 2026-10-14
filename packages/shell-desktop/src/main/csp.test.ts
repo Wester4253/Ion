@@ -7,7 +7,7 @@ const DISCORD_POLICY =
 
 /** Grants in table order: `*.vencord.dev`, then the two GitHub hosts, userpfp's, then loopback, then catalog. */
 const CONNECT_GRANTS =
-  "*.vencord.dev raw.githubusercontent.com userpfp.github.io ws://localhost:* http://localhost:* api.betterdiscord.app shindex.uwu.network cdn.jsdelivr.net cumcordthemes.github.io";
+  "*.vencord.dev raw.githubusercontent.com userpfp.github.io ws://localhost:* http://localhost:* api.betterdiscord.app shindex.uwu.network cdn.jsdelivr.net cumcordthemes.github.io usrbg.is-hardly.online";
 const IMG_GRANTS = "*.vencord.dev raw.githubusercontent.com";
 
 /** The exact rewrite of DISCORD_POLICY: grants appended, order and separators preserved. The `style-src` and `font-src` directives are created from `default-src` because DISCORD_POLICY has none. */
@@ -106,6 +106,13 @@ describe("patchPolicy", () => {
     const directives = parsePolicy(patchPolicy(DISCORD_POLICY));
     expect(directives.get("connect-src")).toContain("cumcordthemes.github.io");
     expect(directives.get("style-src")).not.toContain("cumcordthemes.github.io");
+  });
+
+  test("grants USRBG's banner API connect only", () => {
+    const directives = parsePolicy(patchPolicy(DISCORD_POLICY));
+    expect(directives.get("connect-src")).toContain("usrbg.is-hardly.online");
+    expect(directives.get("style-src")).not.toContain("usrbg.is-hardly.online");
+    expect(directives.get("img-src")).not.toContain("usrbg.is-hardly.online");
   });
 
   test("grants no host outside the table", () => {

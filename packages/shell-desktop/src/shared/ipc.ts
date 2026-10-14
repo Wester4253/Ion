@@ -37,6 +37,8 @@ export const IPC = {
   fsChanged: "ion:fs:changed",
   /** invoke: fetch a URL through the main process (bypasses page CSP/CORS). */
   fetchUrl: "ion:fetch-url",
+  /** sendSync: set content protection (screenshot/screen-capture block) on the window. */
+  contentProtection: "ion:content-protection",
 } as const;
 
 export type IonChannel = (typeof IPC)[keyof typeof IPC];
