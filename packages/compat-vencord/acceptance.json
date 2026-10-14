@@ -15,7 +15,7 @@
     "group": "A",
     "folder": "_api/messageEvents",
     "name": "MessageEventsAPI",
-    "tier3": "With an outbound-message plugin enabled, confirm normal sending still works \u2014 this API owns send/edit hooks."
+    "tier3": "With an outbound-message plugin enabled, confirm normal sending still works — this API owns send/edit hooks."
   },
   {
     "group": "A",
@@ -81,7 +81,7 @@
     "group": "B",
     "folder": "_core/supportHelper",
     "name": "SupportHelper",
-    "tier3": "Expect Vencord's 'unsupported build' helper text on non-official builds \u2014 that is upstream behavior, not a bug."
+    "tier3": "Expect Vencord's 'unsupported build' helper text on non-official builds — that is upstream behavior, not a bug."
   },
   {
     "group": "C",
@@ -112,7 +112,7 @@
     "group": "C",
     "folder": "_core/noTrack",
     "name": "NoTrack",
-    "tier3": "DevTools \u2192 Network: confirm no requests to sentry.io or Discord analytics endpoints fire."
+    "tier3": "DevTools → Network: confirm no requests to sentry.io or Discord analytics endpoints fire."
   },
   {
     "group": "C",
@@ -148,7 +148,7 @@
     "group": "D",
     "folder": "petpet",
     "name": "petpet",
-    "tier3": "Right-click a user \u2192 Pet Pet: the generated image must appear in the message draft and send."
+    "tier3": "Right-click a user → Pet Pet: the generated image must appear in the message draft and send."
   },
   {
     "group": "D",
@@ -160,7 +160,7 @@
     "group": "D",
     "folder": "volumeBooster",
     "name": "VolumeBooster",
-    "tier3": "User Settings \u2192 Voice: the slider must be able to exceed 100% and audibly boost."
+    "tier3": "User Settings → Voice: the slider must be able to exceed 100% and audibly boost."
   },
   {
     "group": "D",
@@ -184,12 +184,901 @@
     "group": "D",
     "folder": "experiments",
     "name": "Experiments",
-    "tier3": "User Settings \u2192 Experiments: page must render; view only, do not flip experiments you do not understand."
+    "tier3": "User Settings → Experiments: page must render; view only, do not flip experiments you do not understand."
   },
   {
     "group": "D",
     "folder": "fakeProfileThemes",
     "name": "FakeProfileThemes",
-    "tier3": "Open a profile \u2192 set a gradient; the background must apply and coexist with FakeNitro (test together)."
+    "tier3": "Open a profile → set a gradient; the background must apply and coexist with FakeNitro (test together)."
+  },
+  {
+    "group": "bulk",
+    "folder": "_api/memberListDecorators",
+    "name": "MemberListDecoratorsAPI",
+    "tier3": "Confirm by hand: API to add decorators to member list (both in servers and DMs)"
+  },
+  {
+    "group": "bulk",
+    "folder": "_api/messageDecorations",
+    "name": "MessageDecorationsAPI",
+    "tier3": "Confirm by hand: API to add decorations to messages"
+  },
+  {
+    "group": "bulk",
+    "folder": "_api/messageUpdater",
+    "name": "MessageUpdaterAPI",
+    "tier3": "Confirm by hand: API for updating and re-rendering messages."
+  },
+  {
+    "group": "bulk",
+    "folder": "_api/serverList",
+    "name": "ServerListAPI",
+    "tier3": "Confirm by hand: Api required for plugins that modify the server list"
+  },
+  {
+    "group": "bulk",
+    "folder": "_core/fixDiscordCss",
+    "name": "FixDiscordCss",
+    "note": "upstream marks this plugin required",
+    "tier3": "Confirm by hand: Fixes Discord's css lag"
+  },
+  {
+    "group": "bulk",
+    "folder": "accountPanelServerProfile",
+    "name": "AccountPanelServerProfile",
+    "tier3": "Confirm by hand: Right click your account panel in the bottom left to view your profile in the current server"
+  },
+  {
+    "group": "bulk",
+    "folder": "alwaysExpandRoles",
+    "name": "AlwaysExpandRoles",
+    "tier3": "Confirm by hand: Always expands the role list in profile popouts"
+  },
+  {
+    "group": "bulk",
+    "folder": "alwaysTrust",
+    "name": "AlwaysTrust",
+    "tier3": "Confirm by hand: Removes the annoying untrusted domain and suspicious file popup"
+  },
+  {
+    "group": "bulk",
+    "folder": "anonymiseFileNames",
+    "name": "AnonymiseFileNames",
+    "tier3": "Confirm by hand: Anonymise uploaded file names"
+  },
+  {
+    "group": "bulk",
+    "folder": "arRPC.web",
+    "name": "WebRichPresence (arRPC)",
+    "tier3": "Confirm by hand: Client plugin for arRPC to enable RPC on Discord Web (experimental)"
+  },
+  {
+    "group": "bulk",
+    "folder": "betterFolders",
+    "name": "BetterFolders",
+    "tier3": "Confirm by hand: Shows server folders on dedicated sidebar and adds folder related improvements"
+  },
+  {
+    "group": "bulk",
+    "folder": "betterGifPicker",
+    "name": "BetterGifPicker",
+    "tier3": "Confirm by hand: Makes the gif picker open the favourite category by default"
+  },
+  {
+    "group": "bulk",
+    "folder": "betterRoleContext",
+    "name": "BetterRoleContext",
+    "tier3": "Confirm by hand: Adds options to copy role color / edit role / view role icon when right clicking roles in the user profile or in the member list"
+  },
+  {
+    "group": "bulk",
+    "folder": "betterRoleDot",
+    "name": "BetterRoleDot",
+    "tier3": "Confirm by hand: Copy role colour on RoleDot (accessibility setting) click. Also allows using both RoleDot and coloured names simultaneously"
+  },
+  {
+    "group": "bulk",
+    "folder": "betterSessions",
+    "name": "BetterSessions",
+    "tier3": "Confirm by hand: Enhances the sessions (devices) menu. Allows you to view exact timestamps, give each session a custom name, and receive notifications about new sessions."
+  },
+  {
+    "group": "bulk",
+    "folder": "betterSettings",
+    "name": "BetterSettings",
+    "tier3": "Confirm by hand: Enhances your settings-menu-opening experience"
+  },
+  {
+    "group": "bulk",
+    "folder": "betterUploadButton",
+    "name": "BetterUploadButton",
+    "tier3": "Confirm by hand: Upload with a single click, open menu with right click"
+  },
+  {
+    "group": "bulk",
+    "folder": "biggerStreamPreview",
+    "name": "BiggerStreamPreview",
+    "tier3": "Confirm by hand: This plugin allows you to enlarge stream previews"
+  },
+  {
+    "group": "bulk",
+    "folder": "blurNsfw",
+    "name": "BlurNSFW",
+    "tier3": "Confirm by hand: Blur attachments in NSFW channels until hovered"
+  },
+  {
+    "group": "bulk",
+    "folder": "callTimer",
+    "name": "CallTimer",
+    "tier3": "Confirm by hand: Adds a timer to vcs"
+  },
+  {
+    "group": "bulk",
+    "folder": "characterCounter",
+    "name": "CharacterCounter",
+    "tier3": "Confirm by hand: Adds a character counter to the chat input"
+  },
+  {
+    "group": "bulk",
+    "folder": "clearURLs",
+    "name": "ClearURLs",
+    "tier3": "Confirm by hand: Automatically removes tracking elements from URLs you send"
+  },
+  {
+    "group": "bulk",
+    "folder": "clientTheme",
+    "name": "ClientTheme",
+    "tier3": "Confirm by hand: Recreation of the old client theme experiment. Add a color to your Discord client theme"
+  },
+  {
+    "group": "bulk",
+    "folder": "colorSighted",
+    "name": "ColorSighted",
+    "tier3": "Confirm by hand: Removes the colorblind-friendly icons from statuses, just like 2015-2017 Discord"
+  },
+  {
+    "group": "bulk",
+    "folder": "consoleJanitor",
+    "name": "ConsoleJanitor",
+    "tier3": "Confirm by hand: Disables annoying console messages/errors"
+  },
+  {
+    "group": "bulk",
+    "folder": "consoleShortcuts",
+    "name": "ConsoleShortcuts",
+    "tier3": "Confirm by hand: Adds shorter Aliases for many things on the window. Run `shortcutList` for a list."
+  },
+  {
+    "group": "bulk",
+    "folder": "copyEmojiMarkdown",
+    "name": "CopyEmojiMarkdown",
+    "tier3": "Confirm by hand: Allows you to copy emojis as formatted string (<:blobcatcozy:1026533070955872337>)"
+  },
+  {
+    "group": "bulk",
+    "folder": "copyFileContents",
+    "name": "CopyFileContents",
+    "tier3": "Confirm by hand: Adds a button to text file attachments to copy their contents"
+  },
+  {
+    "group": "bulk",
+    "folder": "copyStickerLinks",
+    "name": "CopyStickerLinks",
+    "tier3": "Confirm by hand: Adds the ability to copy & open Sticker links"
+  },
+  {
+    "group": "bulk",
+    "folder": "copyUserURLs",
+    "name": "CopyUserURLs",
+    "tier3": "Confirm by hand: Adds a 'Copy User URL' option to the user context menu."
+  },
+  {
+    "group": "bulk",
+    "folder": "customCommands",
+    "name": "CustomCommands",
+    "tier3": "Confirm by hand: Allows you to create custom slash commands / tags"
+  },
+  {
+    "group": "bulk",
+    "folder": "customIdle",
+    "name": "CustomIdle",
+    "tier3": "Confirm by hand: Allows you to set the time before Discord goes idle (or disable auto-idle)"
+  },
+  {
+    "group": "bulk",
+    "folder": "customRPC",
+    "name": "CustomRPC",
+    "tier3": "Confirm by hand: Add a fully customisable Rich Presence (Game status) to your Discord profile"
+  },
+  {
+    "group": "bulk",
+    "folder": "dearrow",
+    "name": "Dearrow",
+    "tier3": "Confirm by hand: Makes YouTube embed titles and thumbnails less sensationalist, powered by Dearrow"
+  },
+  {
+    "group": "bulk",
+    "folder": "decor",
+    "name": "Decor",
+    "tier3": "Confirm by hand: Create and use your own custom avatar decorations, or pick your favorite from the presets."
+  },
+  {
+    "group": "bulk",
+    "folder": "disableCallIdle",
+    "name": "DisableCallIdle",
+    "tier3": "Confirm by hand: Disables automatically getting kicked from a DM voice call after 3 minutes and being moved to an AFK voice channel."
+  },
+  {
+    "group": "bulk",
+    "folder": "dontRoundMyTimestamps",
+    "name": "DontRoundMyTimestamps",
+    "tier3": "Confirm by hand: Always rounds relative timestamps down, so 7.6y becomes 7y instead of 8y"
+  },
+  {
+    "group": "bulk",
+    "folder": "expressionCloner",
+    "name": "ExpressionCloner",
+    "tier3": "Confirm by hand: Allows you to clone Emotes & Stickers to your own server (right click them)"
+  },
+  {
+    "group": "bulk",
+    "folder": "f8break",
+    "name": "F8Break",
+    "tier3": "Confirm by hand: Pause the client when you press F8 with DevTools (+ breakpoints) open."
+  },
+  {
+    "group": "bulk",
+    "folder": "favEmojiFirst",
+    "name": "FavoriteEmojiFirst",
+    "tier3": "Confirm by hand: Puts your favorite emoji first in the emoji autocomplete."
+  },
+  {
+    "group": "bulk",
+    "folder": "fixCodeblockGap",
+    "name": "FixCodeblockGap",
+    "tier3": "Confirm by hand: Removes the gap between codeblocks and text below it"
+  },
+  {
+    "group": "bulk",
+    "folder": "fixImagesQuality",
+    "name": "FixImagesQuality",
+    "tier3": "Confirm by hand: Improves quality of images by loading them at their original resolution"
+  },
+  {
+    "group": "bulk",
+    "folder": "fixSpotifyEmbeds.desktop",
+    "name": "FixSpotifyEmbeds",
+    "tier3": "Confirm by hand: Fixes spotify embeds being incredibly loud by letting you customise the volume"
+  },
+  {
+    "group": "bulk",
+    "folder": "forceOwnerCrown",
+    "name": "ForceOwnerCrown",
+    "tier3": "Confirm by hand: Force the owner crown next to usernames even if the server is large."
+  },
+  {
+    "group": "bulk",
+    "folder": "friendInvites",
+    "name": "FriendInvites",
+    "tier3": "Confirm by hand: Create and manage friend invite links via slash commands (/create friend invite, /view friend invites, /revoke friend invites)."
+  },
+  {
+    "group": "bulk",
+    "folder": "fullSearchContext",
+    "name": "FullSearchContext",
+    "tier3": "Confirm by hand: Makes the message context menu in message search results have all options you'd expect"
+  },
+  {
+    "group": "bulk",
+    "folder": "fullUserInChatbox",
+    "name": "FullUserInChatbox",
+    "tier3": "Confirm by hand: Makes the user mention in the chatbox have more functionalities, like left/right clicking"
+  },
+  {
+    "group": "bulk",
+    "folder": "gameActivityToggle",
+    "name": "GameActivityToggle",
+    "tier3": "Confirm by hand: Adds a button next to the mic and deafen button to toggle game activity. Right click it to toggle Spotify activity."
+  },
+  {
+    "group": "bulk",
+    "folder": "gifPaste",
+    "name": "GifPaste",
+    "tier3": "Confirm by hand: Makes picking a gif in the gif picker insert a link into the chatbox instead of instantly sending it"
+  },
+  {
+    "group": "bulk",
+    "folder": "gifProviderSwitcher",
+    "name": "GifProviderSwitcher",
+    "tier3": "Confirm by hand: Allows you to use Tenor or Giphy GIF search instead of Klipy"
+  },
+  {
+    "group": "bulk",
+    "folder": "hideAttachments",
+    "name": "HideMedia",
+    "tier3": "Confirm by hand: Hide attachments and embeds for individual messages via hover button"
+  },
+  {
+    "group": "bulk",
+    "folder": "ignoreActivities",
+    "name": "IgnoreActivities",
+    "tier3": "Confirm by hand: Ignore activities from showing up on your status ONLY. You can configure which ones are specifically ignored from the Registered Games and Activities tabs, or use the general settings below"
+  },
+  {
+    "group": "bulk",
+    "folder": "iLoveSpam",
+    "name": "iLoveSpam",
+    "tier3": "Confirm by hand: Do not hide messages from 'likely spammers'"
+  },
+  {
+    "group": "bulk",
+    "folder": "imageFilename",
+    "name": "ImageFilename",
+    "tier3": "Confirm by hand: Display the file name of images & GIFs as a tooltip when hovering over them"
+  },
+  {
+    "group": "bulk",
+    "folder": "imageLink",
+    "name": "ImageLink",
+    "tier3": "Confirm by hand: Never hide image links in messages, even if it's the only content"
+  },
+  {
+    "group": "bulk",
+    "folder": "imageZoom",
+    "name": "ImageZoom",
+    "tier3": "Confirm by hand: Lets you zoom in to images and gifs. Use scroll wheel to zoom in and shift + scroll wheel to increase lens radius / size"
+  },
+  {
+    "group": "bulk",
+    "folder": "implicitRelationships",
+    "name": "ImplicitRelationships",
+    "tier3": "Confirm by hand: Shows your implicit relationships in the Friends tab."
+  },
+  {
+    "group": "bulk",
+    "folder": "ircColors",
+    "name": "IrcColors",
+    "tier3": "Confirm by hand: Makes username colors in chat unique, like in IRC clients"
+  },
+  {
+    "group": "bulk",
+    "folder": "keepCurrentChannel",
+    "name": "KeepCurrentChannel",
+    "tier3": "Confirm by hand: Attempt to navigate to the channel you were in before switching accounts or loading Discord."
+  },
+  {
+    "group": "bulk",
+    "folder": "loadingQuotes",
+    "name": "LoadingQuotes",
+    "tier3": "Confirm by hand: Replace Discords loading quotes"
+  },
+  {
+    "group": "bulk",
+    "folder": "memberCount",
+    "name": "MemberCount",
+    "tier3": "Confirm by hand: Shows the number of online members, total members, and users in voice channels on the server — in the member list and tooltip."
+  },
+  {
+    "group": "bulk",
+    "folder": "mentionAvatars",
+    "name": "MentionAvatars",
+    "tier3": "Confirm by hand: Shows user avatars and role icons inside mentions"
+  },
+  {
+    "group": "bulk",
+    "folder": "messageClickActions",
+    "name": "MessageClickActions",
+    "tier3": "Confirm by hand: Hold Backspace and click to delete, double click to edit/reply"
+  },
+  {
+    "group": "bulk",
+    "folder": "messageLatency",
+    "name": "MessageLatency",
+    "tier3": "Confirm by hand: Displays an indicator for messages that took ≥n seconds to send"
+  },
+  {
+    "group": "bulk",
+    "folder": "messageLinkEmbeds",
+    "name": "MessageLinkEmbeds",
+    "tier3": "Confirm by hand: Adds a preview to messages that link another message"
+  },
+  {
+    "group": "bulk",
+    "folder": "messageLogger",
+    "name": "MessageLogger",
+    "tier3": "Confirm by hand: Temporarily logs deleted and edited messages."
+  },
+  {
+    "group": "bulk",
+    "folder": "moreQuickReactions",
+    "name": "MoreQuickReactions",
+    "tier3": "Confirm by hand: Increases the number of reactions available in the Quick React hover menu"
+  },
+  {
+    "group": "bulk",
+    "folder": "musicRichPresence",
+    "name": "MusicRichPresence",
+    "tier3": "Confirm by hand: Rich Presence for Last.FM/Listenbrainz"
+  },
+  {
+    "group": "bulk",
+    "folder": "mutualGroupDMs",
+    "name": "MutualGroupDMs",
+    "tier3": "Confirm by hand: Shows mutual group dms in profiles"
+  },
+  {
+    "group": "bulk",
+    "folder": "newGuildSettings",
+    "name": "NewGuildSettings",
+    "tier3": "Confirm by hand: Automatically mute new servers and change various other settings upon joining"
+  },
+  {
+    "group": "bulk",
+    "folder": "noBlockedMessages",
+    "name": "NoBlockedMessages",
+    "tier3": "Confirm by hand: Hides all blocked/ignored messages from chat completely"
+  },
+  {
+    "group": "bulk",
+    "folder": "noDevtoolsWarning",
+    "name": "NoDevtoolsWarning",
+    "tier3": "Confirm by hand: Disables the 'HOLD UP' banner in the console. As a side effect, also prevents Discord from hiding your token, which prevents random logouts."
+  },
+  {
+    "group": "bulk",
+    "folder": "noF1",
+    "name": "NoF1",
+    "tier3": "Confirm by hand: Disables F1 help bind."
+  },
+  {
+    "group": "bulk",
+    "folder": "noMaskedUrlPaste",
+    "name": "NoMaskedUrlPaste",
+    "tier3": "Confirm by hand: Pasting a link while having text selected will not paste as masked URL"
+  },
+  {
+    "group": "bulk",
+    "folder": "noMiddleClickPaste",
+    "name": "NoMiddleClickPaste",
+    "tier3": "Confirm by hand: Disable Linux middle-click paste - Linux only"
+  },
+  {
+    "group": "bulk",
+    "folder": "noMosaic",
+    "name": "NoMosaic",
+    "tier3": "Confirm by hand: Removes Discord image mosaic"
+  },
+  {
+    "group": "bulk",
+    "folder": "noOnboardingDelay",
+    "name": "NoOnboardingDelay",
+    "tier3": "Confirm by hand: Skips the slow and annoying onboarding delay"
+  },
+  {
+    "group": "bulk",
+    "folder": "noPendingCount",
+    "name": "NoPendingCount",
+    "tier3": "Confirm by hand: Removes the ping count of incoming friend requests, message requests, and nitro offers."
+  },
+  {
+    "group": "bulk",
+    "folder": "noProfileThemes",
+    "name": "NoProfileThemes",
+    "tier3": "Confirm by hand: Completely removes Nitro profile themes from everyone but yourself"
+  },
+  {
+    "group": "bulk",
+    "folder": "noReplyMention",
+    "name": "NoReplyMention",
+    "tier3": "Confirm by hand: Disables reply pings by default"
+  },
+  {
+    "group": "bulk",
+    "folder": "noServerEmojis",
+    "name": "NoServerEmojis",
+    "tier3": "Confirm by hand: Do not show server emojis in the autocomplete menu."
+  },
+  {
+    "group": "bulk",
+    "folder": "notificationVolume",
+    "name": "NotificationVolume",
+    "tier3": "Confirm by hand: Save your ears and set a separate volume for notifications and in-app sounds"
+  },
+  {
+    "group": "bulk",
+    "folder": "noUnblockToJump",
+    "name": "NoUnblockToJump",
+    "tier3": "Confirm by hand: Allows you to jump to messages of blocked or ignored users and likely spammers without unblocking them"
+  },
+  {
+    "group": "bulk",
+    "folder": "oneko",
+    "name": "oneko",
+    "tier3": "Confirm by hand: cat follow mouse (real)"
+  },
+  {
+    "group": "bulk",
+    "folder": "onePingPerDM",
+    "name": "OnePingPerDM",
+    "tier3": "Confirm by hand: If unread messages are sent by a user in DMs multiple times, you'll only receive one audio ping. Read the messages to reset the limit"
+  },
+  {
+    "group": "bulk",
+    "folder": "openInApp",
+    "name": "OpenInApp",
+    "tier3": "Confirm by hand: Open links in their respective apps instead of your browser"
+  },
+  {
+    "group": "bulk",
+    "folder": "overrideForumDefaults",
+    "name": "OverrideForumDefaults",
+    "tier3": "Confirm by hand: Allows you to override default forum layout/sort order. you can still change it on a per-channel basis"
+  },
+  {
+    "group": "bulk",
+    "folder": "pauseInvitesForever",
+    "name": "PauseInvitesForever",
+    "tier3": "Confirm by hand: Brings back the option to pause invites indefinitely that stupit Discord removed."
+  },
+  {
+    "group": "bulk",
+    "folder": "permissionFreeWill",
+    "name": "PermissionFreeWill",
+    "tier3": "Confirm by hand: Disables the client-side restrictions for channel permission management."
+  },
+  {
+    "group": "bulk",
+    "folder": "permissionsViewer",
+    "name": "PermissionsViewer",
+    "tier3": "Confirm by hand: View the permissions a user or channel has, and the roles of a server"
+  },
+  {
+    "group": "bulk",
+    "folder": "pictureInPicture",
+    "name": "PictureInPicture",
+    "tier3": "Confirm by hand: Adds picture in picture to videos (next to the Download button)"
+  },
+  {
+    "group": "bulk",
+    "folder": "pinDms",
+    "name": "PinDMs",
+    "tier3": "Confirm by hand: Allows you to pin private channels to the top of your DM list. To pin/unpin or re-order pins, right click DMs"
+  },
+  {
+    "group": "bulk",
+    "folder": "plainFolderIcon",
+    "name": "PlainFolderIcon",
+    "tier3": "Confirm by hand: Dont show the small guild icons in folders"
+  },
+  {
+    "group": "bulk",
+    "folder": "platformIndicators",
+    "name": "PlatformIndicators",
+    "tier3": "Confirm by hand: Adds platform indicators (Desktop, Mobile, Web...) to users"
+  },
+  {
+    "group": "bulk",
+    "folder": "previewMessage",
+    "name": "PreviewMessage",
+    "tier3": "Confirm by hand: Lets you preview your message before sending it."
+  },
+  {
+    "group": "bulk",
+    "folder": "quickMention",
+    "name": "QuickMention",
+    "tier3": "Confirm by hand: Adds a quick mention button to the message actions bar"
+  },
+  {
+    "group": "bulk",
+    "folder": "quickReply",
+    "name": "QuickReply",
+    "tier3": "Confirm by hand: Reply to (ctrl + up/down) and edit (ctrl + shift + up/down) messages via keybinds"
+  },
+  {
+    "group": "bulk",
+    "folder": "reactErrorDecoder",
+    "name": "ReactErrorDecoder",
+    "tier3": "Confirm by hand: Replaces \"Minified React Error\" with the actual error."
+  },
+  {
+    "group": "bulk",
+    "folder": "readAllNotificationsButton",
+    "name": "ReadAllNotificationsButton",
+    "tier3": "Confirm by hand: Read all server notifications with a single button click!"
+  },
+  {
+    "group": "bulk",
+    "folder": "relationshipNotifier",
+    "name": "RelationshipNotifier",
+    "tier3": "Confirm by hand: Notifies you when a friend, group chat, or server removes you."
+  },
+  {
+    "group": "bulk",
+    "folder": "replaceGoogleSearch",
+    "name": "ReplaceGoogleSearch",
+    "tier3": "Confirm by hand: Replaces the Google search with different Engine(s)"
+  },
+  {
+    "group": "bulk",
+    "folder": "replyTimestamp",
+    "name": "ReplyTimestamp",
+    "tier3": "Confirm by hand: Shows a timestamp on replied-message previews"
+  },
+  {
+    "group": "bulk",
+    "folder": "revealAllSpoilers",
+    "name": "RevealAllSpoilers",
+    "tier3": "Confirm by hand: Reveal all spoilers in a message by Ctrl-clicking a spoiler, or in the chat with Ctrl+Shift-click"
+  },
+  {
+    "group": "bulk",
+    "folder": "reverseImageSearch",
+    "name": "ReverseImageSearch",
+    "tier3": "Confirm by hand: Adds ImageSearch to image context menus"
+  },
+  {
+    "group": "bulk",
+    "folder": "reviewDB",
+    "name": "ReviewDB",
+    "tier3": "Confirm by hand: Review other users (Adds a new settings to profiles)"
+  },
+  {
+    "group": "bulk",
+    "folder": "roleColorEverywhere",
+    "name": "RoleColorEverywhere",
+    "tier3": "Confirm by hand: Adds the top role color anywhere possible"
+  },
+  {
+    "group": "bulk",
+    "folder": "secretRingTone",
+    "name": "SecretRingToneEnabler",
+    "tier3": "Confirm by hand: Always play the secret version of the discord ringtone (except during special ringtone events)"
+  },
+  {
+    "group": "bulk",
+    "folder": "sendTimestamps",
+    "name": "SendTimestamps",
+    "tier3": "Confirm by hand: Send timestamps easily via chat box button & text shortcuts. Read the extended description!"
+  },
+  {
+    "group": "bulk",
+    "folder": "serverListIndicators",
+    "name": "ServerListIndicators",
+    "tier3": "Confirm by hand: Add online friend count or server count in the server list"
+  },
+  {
+    "group": "bulk",
+    "folder": "shikiCodeblocks.desktop",
+    "name": "ShikiCodeblocks",
+    "tier3": "Confirm by hand: Brings vscode-style codeblocks into Discord, powered by Shiki"
+  },
+  {
+    "group": "bulk",
+    "folder": "showAllMessageButtons",
+    "name": "ShowAllMessageButtons",
+    "tier3": "Confirm by hand: Always show all message buttons no matter if you are holding the shift key or not."
+  },
+  {
+    "group": "bulk",
+    "folder": "showConnections",
+    "name": "ShowConnections",
+    "tier3": "Confirm by hand: Show connected accounts in user popouts"
+  },
+  {
+    "group": "bulk",
+    "folder": "showHiddenThings",
+    "name": "ShowHiddenThings",
+    "tier3": "Confirm by hand: Displays various hidden & moderator-only things regardless of permissions."
+  },
+  {
+    "group": "bulk",
+    "folder": "showMeYourName",
+    "name": "ShowMeYourName",
+    "tier3": "Confirm by hand: Display usernames next to nicks, or no nicks at all"
+  },
+  {
+    "group": "bulk",
+    "folder": "showTimeoutDuration",
+    "name": "ShowTimeoutDuration",
+    "tier3": "Confirm by hand: Shows how much longer a user's timeout will last, either in the timeout icon tooltip or next to it"
+  },
+  {
+    "group": "bulk",
+    "folder": "silentMessageToggle",
+    "name": "SilentMessageToggle",
+    "tier3": "Confirm by hand: Adds a button to the chat bar to toggle sending a silent message."
+  },
+  {
+    "group": "bulk",
+    "folder": "silentTyping",
+    "name": "SilentTyping",
+    "tier3": "Confirm by hand: Hide that you are typing"
+  },
+  {
+    "group": "bulk",
+    "folder": "sortFriendRequests",
+    "name": "SortFriendRequests",
+    "tier3": "Confirm by hand: Sorts friend requests by date of receipt"
+  },
+  {
+    "group": "bulk",
+    "folder": "spotifyControls",
+    "name": "SpotifyControls",
+    "tier3": "Confirm by hand: Adds a Spotify player above the account panel"
+  },
+  {
+    "group": "bulk",
+    "folder": "spotifyCrack",
+    "name": "SpotifyCrack",
+    "tier3": "Confirm by hand: Free listen along, no auto-pausing in voice chat, and allows activity to continue playing when idling"
+  },
+  {
+    "group": "bulk",
+    "folder": "spotifyShareCommands",
+    "name": "SpotifyShareCommands",
+    "tier3": "Confirm by hand: Share your current Spotify track, album or artist via slash command (/track, /album, /artist)"
+  },
+  {
+    "group": "bulk",
+    "folder": "startupTimings",
+    "name": "StartupTimings",
+    "tier3": "Confirm by hand: Adds Startup Timings to the Settings menu"
+  },
+  {
+    "group": "bulk",
+    "folder": "stickerPaste",
+    "name": "StickerPaste",
+    "tier3": "Confirm by hand: Makes picking a sticker in the sticker picker insert it into the chatbox instead of instantly sending"
+  },
+  {
+    "group": "bulk",
+    "folder": "streamerModeOnStream",
+    "name": "StreamerModeOnStream",
+    "tier3": "Confirm by hand: Automatically enables streamer mode when you start streaming in Discord"
+  },
+  {
+    "group": "bulk",
+    "folder": "superReactionTweaks",
+    "name": "SuperReactionTweaks",
+    "tier3": "Confirm by hand: Customize the limit of Super Reactions playing at once, and super react by default"
+  },
+  {
+    "group": "bulk",
+    "folder": "textReplace",
+    "name": "TextReplace",
+    "tier3": "Confirm by hand: Replace text in your messages. You can find pre-made rules in the #textreplace-rules channel in Vencord's Server"
+  },
+  {
+    "group": "bulk",
+    "folder": "themeAttributes",
+    "name": "ThemeAttributes",
+    "tier3": "Confirm by hand: Adds data attributes to various elements for theming purposes"
+  },
+  {
+    "group": "bulk",
+    "folder": "translate",
+    "name": "Translate",
+    "tier3": "Confirm by hand: Translate messages with Google Translate, DeepL or Kagi."
+  },
+  {
+    "group": "bulk",
+    "folder": "typingIndicator",
+    "name": "TypingIndicator",
+    "tier3": "Confirm by hand: Adds an indicator if someone is typing on a channel."
+  },
+  {
+    "group": "bulk",
+    "folder": "typingTweaks",
+    "name": "TypingTweaks",
+    "tier3": "Confirm by hand: Show avatars and role colours in the typing indicator"
+  },
+  {
+    "group": "bulk",
+    "folder": "unindent",
+    "name": "Unindent",
+    "tier3": "Confirm by hand: Trims leading indentation from codeblocks"
+  },
+  {
+    "group": "bulk",
+    "folder": "unlockedAvatarZoom",
+    "name": "UnlockedAvatarZoom",
+    "tier3": "Confirm by hand: Allows you to zoom in further in the image crop tool when changing your avatar"
+  },
+  {
+    "group": "bulk",
+    "folder": "unsuppressEmbeds",
+    "name": "UnsuppressEmbeds",
+    "tier3": "Confirm by hand: Allows you to unsuppress embeds in messages"
+  },
+  {
+    "group": "bulk",
+    "folder": "userMessagesPronouns",
+    "name": "UserMessagesPronouns",
+    "tier3": "Confirm by hand: Adds pronouns to chat user messages"
+  },
+  {
+    "group": "bulk",
+    "folder": "userVoiceShow",
+    "name": "UserVoiceShow",
+    "tier3": "Confirm by hand: Shows an indicator when a user is in a Voice Channel"
+  },
+  {
+    "group": "bulk",
+    "folder": "usrbg",
+    "name": "USRBG",
+    "tier3": "Confirm by hand: Displays user banners from USRBG, allowing anyone to get a banner without Nitro"
+  },
+  {
+    "group": "bulk",
+    "folder": "validReply",
+    "name": "ValidReply",
+    "tier3": "Confirm by hand: Fixes \"Message could not be loaded\" upon hovering over the reply"
+  },
+  {
+    "group": "bulk",
+    "folder": "validUser",
+    "name": "ValidUser",
+    "tier3": "Confirm by hand: Fix mentions for unknown users showing up as '@unknown-user' (hover over a mention to fix it)"
+  },
+  {
+    "group": "bulk",
+    "folder": "vcDoubleClick",
+    "name": "VoiceChatDoubleClick",
+    "tier3": "Confirm by hand: Join voice chats via double click instead of single click"
+  },
+  {
+    "group": "bulk",
+    "folder": "vcNarrator",
+    "name": "VcNarrator",
+    "tier3": "Confirm by hand: Announces when users join, leave, or move voice channels via narrator"
+  },
+  {
+    "group": "bulk",
+    "folder": "vencordToolbox",
+    "name": "VencordToolbox",
+    "tier3": "Confirm by hand: Adds a button to the titlebar that houses Vencord quick actions"
+  },
+  {
+    "group": "bulk",
+    "folder": "viewIcons",
+    "name": "ViewIcons",
+    "tier3": "Confirm by hand: Makes avatars and banners in user profiles clickable, adds View Icon/Banner/Avatar Decoration entries in the user, server and group channel context menu."
+  },
+  {
+    "group": "bulk",
+    "folder": "viewRaw",
+    "name": "ViewRaw",
+    "tier3": "Confirm by hand: Copy and view the raw content/data of any message, channel or guild"
+  },
+  {
+    "group": "bulk",
+    "folder": "voiceDownload",
+    "name": "VoiceDownload",
+    "tier3": "Confirm by hand: Adds a download to voice messages. (Opens a new browser tab)"
+  },
+  {
+    "group": "bulk",
+    "folder": "voiceMessages",
+    "name": "VoiceMessages",
+    "tier3": "Confirm by hand: Allows you to send voice messages like on mobile. To do so, right click the upload button and click Send Voice Message"
+  },
+  {
+    "group": "bulk",
+    "folder": "whoReacted",
+    "name": "WhoReacted",
+    "tier3": "Confirm by hand: Renders the avatars of users who reacted to a message"
+  },
+  {
+    "group": "bulk",
+    "folder": "xsOverlay",
+    "name": "XSOverlay",
+    "tier3": "Confirm by hand: Forwards discord notifications to XSOverlay, for easy viewing in VR"
+  },
+  {
+    "group": "bulk",
+    "folder": "youtubeAdblock.desktop",
+    "name": "YoutubeAdblock",
+    "tier3": "Confirm by hand: Block ads in YouTube embeds and the WatchTogether activity via AdGuard"
   }
 ]
