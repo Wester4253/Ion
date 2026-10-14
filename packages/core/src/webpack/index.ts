@@ -206,7 +206,7 @@ export function waitFor(
   }
 
   const unsubscribe = runtime.onModule((moduleExports, id) => {
-    if (matches(predicate, moduleExports)) {
+    if (matches(predicate, moduleExports, id)) {
       unsubscribe();
       fireListener(listener, moduleExports, id);
       return;
@@ -221,7 +221,7 @@ export function waitFor(
         // not a failure of the scan.
         continue;
       }
-      if (nested != null && matches(predicate, nested)) {
+      if (nested != null && matches(predicate, nested, id)) {
         unsubscribe();
         fireListener(listener, nested, id);
         return;

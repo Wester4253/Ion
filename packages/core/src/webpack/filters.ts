@@ -5,7 +5,7 @@
 
 import { canonicalizeMatch } from "../patches";
 
-export type ModuleFilter = (exports: unknown) => boolean;
+export type ModuleFilter = (exports: unknown, id: PropertyKey) => boolean;
 
 export type CodeFilter = readonly (string | RegExp)[];
 

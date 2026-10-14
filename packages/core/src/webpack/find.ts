@@ -33,9 +33,9 @@ export function isGlobalObject(value: unknown): boolean {
 }
 
 /** A filter that throws (a Proxy trap, an uninitialized export) is a miss. */
-export function matches(filter: ModuleFilter, value: unknown): boolean {
+export function matches(filter: ModuleFilter, value: unknown, id: PropertyKey): boolean {
   try {
-    return filter(value);
+    return filter(value, id);
   } catch {
     return false;
   }
@@ -56,14 +56,14 @@ export function findInCache(
     const entry = cache[id];
     if (!entry?.loaded || entry.exports == null) continue;
 
-    if (matches(filter, entry.exports)) return { id, exports: entry.exports };
+    if (matches(filter, entry.exports, id)) return { id, exports: entry.exports };
 
     if (options.topLevelOnly || typeof entry.exports !== "object") continue;
     if (isGlobalObject(entry.exports)) continue;
     for (const key in entry.exports) {
       try {
         const nested = (entry.exports as Record<string, unknown>)[key];
-        if (nested != null && matches(filter, nested)) return { id, exports: nested };
+        if (nested != null && matches(filter, nested, id)) return { id, exports: nested };
       } catch {
         // A throwing getter (circular init, defensive getters) is a miss,
         // not a failure of the search.
@@ -85,14 +85,14 @@ export function findAllInCache(
     const entry = cache[id];
     if (!entry?.loaded || entry.exports == null) continue;
 
-    if (matches(filter, entry.exports)) results.push(entry.exports);
+    if (matches(filter, entry.exports, id)) results.push(entry.exports);
 
     if (options.topLevelOnly || typeof entry.exports !== "object") continue;
     if (isGlobalObject(entry.exports)) continue;
     for (const key in entry.exports) {
       try {
         const nested = (entry.exports as Record<string, unknown>)[key];
-        if (nested != null && matches(filter, nested)) results.push(nested);
+        if (nested != null && matches(filter, nested, id)) results.push(nested);
       } catch {
         continue;
       }

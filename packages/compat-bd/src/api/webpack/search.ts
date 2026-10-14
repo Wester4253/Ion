@@ -308,23 +308,20 @@ export function waitForModule<T>(
   const immediate = scanFirst(wrapped, options);
   if (immediate !== undefined) return Promise.resolve(immediate as T);
 
-  // Reverse index of exports → module record: O(cache) once, O(1) per probe,
-  // with a slow-path rescan for modules that finish loading later.
+  // Reverse index of exports → module record: O(cache) once, then O(1) per
+  // probe. The core's waitFor scans the cache synchronously before
+  // subscribing, so no module can execute between the scan and the
+  // subscription — every later module arrives through the probe below,
+  // which indexes it with its id. The old slow path rescanned the whole
+  // cache per miss: O(n²) over a Discord boot, spinning the renderer for
+  // minutes when many plugins wait on late modules.
   const index = new Map<unknown, BdModule>();
   for (const module of everyModule()) {
     if (module.exports != null) index.set(module.exports, module);
   }
   const entryFor = (exports: unknown): BdModule | undefined => {
     if (exports == null || !isIndexableLike(exports)) return undefined;
-    const hit = index.get(exports);
-    if (hit) return hit;
-    for (const module of everyModule()) {
-      if (module.exports === exports) {
-        index.set(exports, module);
-        return module;
-      }
-    }
-    return undefined;
+    return index.get(exports);
   };
 
   return new Promise<T | undefined>((resolve, reject) => {
@@ -347,7 +344,10 @@ export function waitForModule<T>(
 
     let matched: T | undefined;
     const unsubscribe = discovery().waitFor(
-      (exports) => {
+      (exports, id) => {
+        if (exports != null && isIndexableLike(exports)) {
+          index.set(exports, { id, exports });
+        }
         const module = entryFor(exports);
         if (!module) return false;
         const found = getMatched(module, wrapped, options);
